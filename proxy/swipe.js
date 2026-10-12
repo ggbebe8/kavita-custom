@@ -411,13 +411,123 @@
     revisions.set(id, hash(JSON.stringify([chapter.id, chapter.createdUtc, chapter.wordCount,
       chapter.files.map(f => [f.id, f.filePath, f.bytes, f.created, f.koreaderHash, f.pages])])));
   }
-  const label = document.createElement('div');
+  const label = document.createElement('button');
   label.id = 'kavita-screen-page-indicator'; label.hidden = true;
-  label.setAttribute('role', 'status'); label.setAttribute('aria-live', 'off');
+  label.type = 'button'; label.disabled = true;
+  label.setAttribute('aria-haspopup', 'dialog'); label.setAttribute('aria-live', 'off');
   const style = document.createElement('style');
-  style.textContent = '#kavita-screen-page-indicator { position: fixed; right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(5px + env(safe-area-inset-bottom, 0px)); z-index: 1031; padding: 1px 7px; border-radius: 8px; font: 11px/1.4 system-ui,sans-serif; color: #fff; background: rgba(0,0,0,.55); pointer-events: none; user-select: none; white-space: nowrap; } #kavita-screen-page-indicator[hidden] { display: none !important; }';
+  style.textContent = '#kavita-screen-page-indicator { position: fixed; right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(5px + env(safe-area-inset-bottom, 0px)); z-index: 1031; padding: 1px 7px; border: 0; border-radius: 8px; font: 11px/1.4 system-ui,sans-serif; color: #fff; background: rgba(0,0,0,.55); cursor: pointer; user-select: none; white-space: nowrap; } #kavita-screen-page-indicator:disabled { cursor: default; } #kavita-screen-page-indicator:focus-visible { outline: 2px solid #fff; outline-offset: 2px; } #kavita-screen-page-indicator[hidden] { display: none !important; } #kavita-page-jump-message { position: fixed; bottom: 70px; right: 12px; max-width: 85vw; z-index: 1100; padding: 8px 12px; border-radius: 6px; color: #fff; background: #8b2525; font: 13px/1.5 system-ui,sans-serif; }';
   document.head.appendChild(style); document.body.appendChild(label);
   const visible = el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden';
+  let pageJump = null;
+  const jumpDelay = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const jumpFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
+  function jumpMenu(root) {
+    const content = root.querySelector('.book-content');
+    if (!content) return;
+    content.dispatchEvent(new MouseEvent('mousedown', {bubbles:true,clientX:0,clientY:0}));
+    content.dispatchEvent(new MouseEvent('click', {bubbles:true,clientX:0,clientY:0}));
+  }
+  function jumpError(message) {
+    document.getElementById('kavita-page-jump-message')?.remove();
+    const notice = document.createElement('div'); notice.id = 'kavita-page-jump-message';
+    notice.setAttribute('role','alert'); notice.textContent = message;
+    document.body.appendChild(notice); setTimeout(() => notice.remove(), 8000);
+  }
+  async function jumpWait(context, check, timeout = 20000) {
+    const deadline = performance.now() + timeout;
+    while (!check()) {
+      if (!context.root.isConnected || book !== context.owner || performance.now() > deadline ||
+          (context.moving && navigationEpoch !== context.epoch)) throw new Error('페이지 이동을 완료하지 못했습니다. 페이지 계산 후 다시 시도하세요.');
+      await jumpDelay(50);
+    }
+  }
+  function setJumpInput(input, value) {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, String(value));
+    input.dispatchEvent(new Event('input', {bubbles:true}));
+  }
+  async function openPageJump() {
+    update();
+    const root = document.querySelector('app-book-reader'), g = root && geometry(root);
+    if (pageJump || label.disabled || !book || !g || root.querySelector('.is-loading')) return;
+    const context = {root,owner:book,key:signature,counts:counts.slice(),restore:!!root.querySelector('.book-container.immersive')&&!root.querySelector('.reader-header'),moving:false};
+    pageJump = context; label.disabled = true;
+    let modal;
+    try {
+      if (context.restore) {
+        root.classList.add('swipe-restoring-menu'); jumpMenu(root);
+        await jumpFrame(); await jumpFrame();
+      }
+      const link = root.querySelector('.bottom-bar a.btn-link');
+      if (!link) throw new Error('현재 리더의 페이지 이동 기능을 찾을 수 없습니다.');
+      link.click();
+      await jumpWait(context, () => !!document.querySelector('ngb-modal-window app-confirm-dialog.confirm-prompt'), 3000);
+      modal = document.querySelector('ngb-modal-window app-confirm-dialog.confirm-prompt');
+      const input = modal.querySelector('input'), confirm = modal.querySelector('.modal-footer .btn-primary');
+      if (!input || !confirm) throw new Error('페이지 이동 팝업을 사용할 수 없습니다.');
+      const total = context.counts.reduce((sum,n) => sum+n,0);
+      const current = context.counts.slice(0,book.index).reduce((sum,n) => sum+n,0)+g.current;
+      modal.querySelector('.modal-title').textContent = '전체 페이지로 이동';
+      const description = modal.querySelector('.modal-body form > div');
+      if (description) description.textContent = `현재 ${current} / ${total} 페이지. 이동할 페이지 번호를 입력하세요 (1–${total}).`;
+      input.type = 'number'; input.inputMode = 'numeric'; input.min = '1'; input.max = String(total); input.step = '1';
+      input.setAttribute('aria-label','이동할 전체 페이지 번호');
+      const error = document.createElement('div'); error.id = 'kavita-page-jump-validation';
+      error.className = 'text-danger mt-2'; error.setAttribute('role','alert');
+      input.after(error); input.setAttribute('aria-describedby',error.id);
+      setJumpInput(input,current); input.focus({preventScroll:true});
+      modal.addEventListener('click', event => {
+        const button = event.target.closest('button');
+        if (button === modal.querySelector('.modal-header button')) {
+          event.preventDefault(); event.stopImmediatePropagation(); modal.querySelector('.modal-footer .btn-secondary')?.click(); return;
+        }
+        if (button !== confirm) return;
+        const number = Number(input.value), live = geometry(root);
+        let message = '';
+        if (context.moving) message = '페이지로 이동 중입니다.';
+        else if (!/^\d+$/.test(input.value) || !Number.isInteger(number) || number<1 || number>total) message = `1부터 ${total}까지의 정수 페이지 번호를 입력하세요.`;
+        else if (!root.isConnected || book!==context.owner || !live || calculationKey(root,live)!==context.key) message = '화면 설정이 변경됐습니다. 팝업을 닫고 페이지 계산 후 다시 시도하세요.';
+        if (message) {event.preventDefault();event.stopImmediatePropagation();error.textContent=message;input.setAttribute('aria-invalid','true');return;}
+        let remaining = number, index = 0;
+        while (remaining>context.counts[index]) remaining -= context.counts[index++];
+        context.index = index; context.screen = remaining; context.moving = true;
+        document.dispatchEvent(new Event('kavita-page-navigation')); context.epoch = navigationEpoch;
+        // Angular's existing text value accessor receives the EPUB file number.
+        // The original confirmation handler performs the actual file navigation.
+        setJumpInput(input,index+1); confirm.disabled = true;
+      }, true);
+      modal.addEventListener('keydown', event => {
+        if (event.key==='Enter' && event.target===input) {event.preventDefault();event.stopImmediatePropagation();confirm.click();}
+      }, true);
+      modal.querySelector('form')?.addEventListener('submit', event => {event.preventDefault();confirm.click();});
+      while (modal.isConnected && root.isConnected && book===context.owner) await jumpDelay(100);
+      if (!context.moving) return;
+      await jumpWait(context, () => book===context.owner && book.index===context.index && !root.querySelector('.is-loading') &&
+        document.fonts.status==='loaded' && [...root.querySelectorAll('.book-content img')].every(img=>img.complete));
+      // Native section setup schedules its own initial scroll. Let it finish
+      // before applying the selected screen, just as exact resume does.
+      await jumpDelay(450); await jumpFrame();
+      const live = geometry(root);
+      if (!root.isConnected || book!==context.owner || book.index!==context.index || navigationEpoch!==context.epoch ||
+          !live || calculationKey(root,live)!==context.key || context.screen>live.total) throw new Error('페이지 배치가 변경됐습니다. 다시 계산된 번호로 시도하세요.');
+      const offset = (context.screen-1)*live.size;
+      live.content.scrollTo(live.vertical?{top:offset,behavior:'instant'}:{left:offset,behavior:'instant'});
+      live.content.dispatchEvent(new Event('scroll',{bubbles:true}));
+      await jumpFrame();
+      if (geometry(root)?.current!==context.screen) throw new Error('선택한 화면으로 이동하지 못했습니다. 페이지 배치를 확인해 주세요.');
+    } catch (error) {
+      modal?.querySelector('.modal-footer .btn-secondary')?.click();
+      // An explicit new action or leaving the reader cancels the pending jump.
+      if (root.isConnected && book===context.owner && (!context.moving || navigationEpoch===context.epoch)) jumpError(error.message);
+    } finally {
+      if (context.restore && root.isConnected && root.querySelector('.reader-header') && !root.querySelector('.is-loading') &&
+          (!context.moving || navigationEpoch===context.epoch) && !document.querySelector('ngb-modal-window') && !window.getSelection()?.toString()) jumpMenu(root);
+      root.classList.remove('swipe-restoring-menu');
+      if (pageJump===context) pageJump=null;
+      update();
+    }
+  }
+  label.addEventListener('click', () => {void openPageJump();});
   function requestInfo(url) {
     try {
       const u = new URL(url, location.href);
@@ -650,6 +760,7 @@
     finally {session.controller.abort();session.dispose?.();if(activeCalculation===session)activeCalculation=null;running=false;}
   }
   function update() {
+    label.disabled = true;
     const root=document.querySelector('app-book-reader');
     if(!root) {label.hidden=true;resume=null;cancelCalculation();if(book){book=null;signature='';counts=[];generation++;}return;}
     const popup=[...document.querySelectorAll('[role="dialog"],.offcanvas.show,.popover,app-highlight-bar')].some(visible);
@@ -676,7 +787,9 @@
     if(complete) {
       const before=counts.slice(0,book.index).reduce((sum,n)=>sum+n,0),total=counts.slice(0,length).reduce((sum,n)=>sum+n,0);
       label.textContent=`${before+g.current} / ${total}`;
-      label.title='현재 화면 설정으로 계산한 책 전체 페이지';
+      label.title='현재 화면 설정으로 계산한 책 전체 페이지. 눌러서 원하는 페이지로 이동';
+      label.setAttribute('aria-label',`${label.textContent} 페이지. 원하는 페이지로 이동`);
+      label.disabled = !!pageJump;
       if (label.dataset.cacheSaved !== hash(key + JSON.stringify(counts))) {
         saveCounts(key, book); label.dataset.cacheSaved = hash(key + JSON.stringify(counts));
       }
