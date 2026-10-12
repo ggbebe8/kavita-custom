@@ -182,5 +182,23 @@ Chromium fixture에서 미등록 버튼 숨김, 실제 이미지/텍스트 북�
 - `backups/pwa-20261013`에 원본 Compose/Nginx 설정과 SQLite 온라인 백업을 포함한 config 압축 백업을 만들고 무결성/읽기 검증을 완료했습니다.
 - 현재 프록시에 정적 PWA 파일을 복사하고 Nginx 구성을 검증/무중단 reload했습니다. 컨테이너 교체·포트 변경은 수행하지 않았습니다. 현재 컨테이너의 쓰기 레이어에 복사된 파일은 재시작 후에도 유지됩니다. 앞으로 Compose로 컨테이너를 재생성하면 추가된 `./proxy/pwa` 읽기 전용 마운트를 사용합니다.
 - HTTP 5000 서비스의 manifest/icons, 기존 JS, 건강 상태와 실제 Chromium 루프백 설치 조건을 확인했습니다.
-- 외부 38500 HTTP 주소는 아직 HTTPS가 아닙니다. 기존 443 프록시의 다른 서비스 설정은 변경하지 않았습니다. `https://kavita.ggbebe8.duckdns.org` 후보 주소가 같은 서버로 해석되며 기존 프록시에서 5000 upstream 건강 응답을 확인했습니다. `backups/pwa-20261013/Caddyfile.proposed`는 설정 검증을 통과한 준비안이며 아직 적용되지 않았습니다.
+- 기존 외부 38500 HTTP 주소는 그대로 유지합니다. 사용자 승인 후 기존 Caddy의 443 포트에 `https://kavita.ggbebe8.duckdns.org` 호스트를 추가하고 무중단 reload했습니다. 기존 CouchDB 호스트 구성은 그대로 보존했습니다. Kavita 컨테이너 교체나 포트 변경은 수행하지 않았습니다.
 - 롤백은 백업한 `proxy/default.conf`를 복원하고 `docker exec kavita-swipe-proxy nginx -t` 후 `docker exec kavita-swipe-proxy nginx -s reload`합니다. 다음 재생성용 Compose도 백업본으로 복원합니다. 기존 데이터/볼륨 삭제는 필요하지 않습니다.
+
+### HTTPS 연결 적용 (2026-10-13)
+
+- 접속 주소: https://kavita.ggbebe8.duckdns.org/ . Android Chrome에서 이 주소로 접속·로그인하고 메뉴의 **앱 설치 / 홈 화면에 추가**를 사용합니다. 실제 Android 설치는 사용자 기기에서 확인하세요.
+- 현재 경로는 Caddy → `172.21.0.1:5000` → Kavita 프록시 → Kavita입니다. Docker 네트워크 게이트웨이는 현재 환경에서 확인한 값이며 재설치 시 다시 확인합니다.
+- 공유 프록시 파일은 `/home/achops1368/docker/obsidian-livesync/docker/config/Caddyfile`입니다. `BEGIN KAVITA HTTPS`부터 `END KAVITA HTTPS`까지가 추가 호스트입니다. 호스트 파일을 수정했으므로 Docker 재시작 때도 같은 설정을 읽습니다.
+- 기존 Caddy의 인증서 저장 볼륨과 자동 발급/갱신을 사용합니다. 인증서·개인 키는 Kavita Git 및 기능 패키지에 넣지 않습니다. DNS와 외부 80/443 접근이 유지돼야 자동 갱신이 가능합니다.
+- 인증서 신뢰 검증, HTTPS 건강 응답, 공개 HTTPS에서 Chromium 설치 조건 오류 없음, 실제 192/512 PNG 아이콘, 추가 리더 JS 로드를 확인했습니다. 기존 HTTP 38500/로컬 5000 건강 응답과 기존 HTTPS 서비스의 동일한 인증 응답도 확인했습니다.
+- HTTPS 설정은 기본 재설치의 필수 단계가 아닙니다. `portable-features/install.py`만으로 Kavita와 모든 추가 리더 기능이 HTTP로 설치됩니다. 외부 PWA 설치를 원할 때 HTTPS 프록시를 별도로 연결합니다.
+
+적용 전 Caddy/Compose 설정 및 최신 SQLite 온라인 백업: `backups/https-20261013-072712`.
+
+HTTPS 추가만 롤백하려면 현재 Caddyfile에서 관리 표시된 Kavita 블록만 제거하고 다음 명령으로 검증·반영합니다. 기존 HTTP Kavita와 다른 HTTPS 호스트는 유지됩니다. 원본 파일 전체 복원은 그 이후 다른 설정 변경이 없을 때만 사용합니다.
+
+```bash
+docker exec livesync-caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+docker exec livesync-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+```
