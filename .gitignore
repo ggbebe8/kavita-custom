@@ -1,0 +1,29 @@
+# User data and deployment backups
+reinstall/
+backups/*
+# Source snapshots required by regression tests (no user data)
+!backups/image-swipe-20261013/
+backups/image-swipe-20261013/*
+!backups/image-swipe-20261013/swipe.js
+!backups/page-calculation-speed/
+backups/page-calculation-speed/*
+!backups/page-calculation-speed/swipe.js
+books/
+config/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Generated distribution archives and local tooling
+*.zip
+*.tar.gz
+*.tar.gz.sha256
+__pycache__/
+*.py[cod]
+node_modules/
+.DS_Store

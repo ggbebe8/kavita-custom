@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+"""Configure the portable Kavita feature kit; never copy user data or start Docker."""
+import argparse
+import hashlib
+import json
+from pathlib import Path
+import shutil
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--books-dir', type=Path, help='Default: TARGET/books (created automatically)')
+    parser.add_argument('--config-dir', type=Path, help='Default: TARGET/config (created automatically)')
+    parser.add_argument('--target', type=Path, default=Path.home() / 'docker/kavita-custom')
+    parser.add_argument('--port', type=int, default=5000)
+    parser.add_argument('--bind', default='0.0.0.0', choices=['0.0.0.0', '127.0.0.1'])
+    args = parser.parse_args()
+    kit = Path(__file__).resolve().parent
+    manifest = json.loads((kit / 'manifest.json').read_text())
+    for name, digest in manifest.items():
+        path = kit / name
+        if Path(name).is_absolute() or '..' in Path(name).parts:
+            raise ValueError('Invalid package manifest')
+        if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            raise ValueError('Feature package checksum mismatch: ' + name)
+    target = args.target.resolve()
+    books = args.books_dir.resolve() if args.books_dir else target / 'books'
+    config = args.config_dir.resolve() if args.config_dir else target / 'config'
+    if not 1 <= args.port <= 65535:
+        raise ValueError('Port must be between 1 and 65535')
+    for path, explicit in [(books, args.books_dir), (config, args.config_dir)]:
+        if explicit and not path.is_dir():
+            raise ValueError('Data directory must already exist: ' + str(path))
+        if any(c in str(path) for c in '\n\r:'):
+            raise ValueError('Use a Linux/WSL path without colons or newlines')
+    if books == config or books.is_relative_to(config) or config.is_relative_to(books):
+        raise ValueError('Books and config must be separate directories')
+    if target.exists():
+        raise ValueError('Target exists; refusing to overwrite: ' + str(target))
+    if any(target == path or target.is_relative_to(path) for path in [books, config]):
+        raise ValueError('Target cannot be inside a data directory')
+    images = json.loads((kit / 'images.json').read_text())
+    # Compose interpolation treats $$ as a literal $, including inside JSON/YAML strings.
+    source = lambda path: str(path).replace('$', '$$')
+    binding = f'{args.bind}:{args.port}'
+    kavita = {'image': images['kavita'], 'environment': {'TZ': 'Asia/Seoul'},
+              'volumes': [source(books) + ':/books', source(config) + ':/kavita/config'],
+              'restart': 'unless-stopped'}
+    proxy = {'image': images['nginx'], 'ports': [binding + ':80'],
+             'volumes': ['./proxy/default.conf:/etc/nginx/conf.d/default.conf:ro',
+                         './proxy/swipe.js:/usr/share/nginx/html/swipe.js:ro'],
+             'depends_on': ['kavita'], 'restart': 'unless-stopped'}
+    original = dict(kavita, ports=[binding + ':5000'])
+    target.mkdir(parents=True)
+    if args.books_dir is None:
+        books.mkdir()
+    if args.config_dir is None:
+        config.mkdir(mode=0o700)
+    shutil.copytree(kit / 'proxy', target / 'proxy')
+    shutil.copy2(kit / 'README.md', target / 'README.md')
+    (target / 'compose.yaml').write_text(json.dumps({'services': {'kavita': kavita, 'swipe-proxy': proxy}}, indent=2) + '\n')
+    (target / 'compose.original.yaml').write_text(json.dumps({'services': {'kavita': original}}, indent=2) + '\n')
+    print('Feature configuration created:', target)
+    print('User data was not copied or changed. Docker was not started.')
+    print('Books directory:', books, '(register /books in Kavita web library settings)')
+    print('Config directory:', config)
+    print('Service port:', args.port)
+    print('Run in that directory: docker compose -p kavita-custom -f compose.yaml up -d')
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (ValueError, OSError) as error:
+        raise SystemExit('Configuration stopped: ' + str(error))
