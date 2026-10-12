@@ -48,7 +48,8 @@ def main():
               'restart': 'unless-stopped'}
     proxy = {'image': images['nginx'], 'ports': [binding + ':80'],
              'volumes': ['./proxy/default.conf:/etc/nginx/conf.d/default.conf:ro',
-                         './proxy/swipe.js:/usr/share/nginx/html/swipe.js:ro'],
+                         './proxy/swipe.js:/usr/share/nginx/html/swipe.js:ro',
+                         './proxy/pwa:/usr/share/nginx/html/pwa:ro'],
              'depends_on': ['kavita'], 'restart': 'unless-stopped'}
     original = dict(kavita, ports=[binding + ':5000'])
     target.mkdir(parents=True)

@@ -24,6 +24,9 @@ with tempfile.TemporaryDirectory(prefix='kavita-portable-test-') as tmp:
     assert rendered['services']['swipe-proxy']['ports'][0]['published']=='15800'
     assert all('container_name' not in service for service in rendered['services'].values())
     assert (target/'proxy/swipe.js').read_bytes()==(root/'proxy/swipe.js').read_bytes()
+    assert json.loads((target/'proxy/pwa/manifest.webmanifest').read_text())['display']=='standalone'
+    assert (target/'proxy/pwa/icon-512.png').read_bytes()==(root/'proxy/pwa/icon-512.png').read_bytes()
+    assert any(v['target']=='/usr/share/nginx/html/pwa' and v['read_only'] for v in rendered['services']['swipe-proxy']['volumes'])
     assert (books/'preserve.txt').read_text()=='book-data'
     assert (config/'preserve.txt').read_text()=='config-data'
     assert list(config.iterdir())==[config/'preserve.txt']

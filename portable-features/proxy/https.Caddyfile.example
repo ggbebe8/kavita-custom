@@ -1,0 +1,7 @@
+# Example for Caddy running on the same host as Kavita.
+# Replace the hostname with your own DNS name pointing to this server.
+# For Docker-hosted Caddy, replace 127.0.0.1 with a reachable upstream
+# address or a service name on a shared Docker network.
+kavita.example.com {
+    reverse_proxy 127.0.0.1:5000
+}
