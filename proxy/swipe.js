@@ -23,6 +23,10 @@
     app-book-reader .reading-section:is(.column-layout-1,.column-layout-2) .book-content .kavita-scale-width-container > .bookmark-overlay {
       transform: translateX(-100%) !important;
     }
+    app-book-reader.kv-height-tap-zones .tap-to-paginate,
+    app-book-reader.kv-height-tap-zones .tap-to-paginate > div {
+      pointer-events: none !important;
+    }
   `;
   document.head.appendChild(style);
   const visible = el => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
@@ -119,6 +123,88 @@
     if (performance.now() < suppressUntil && e.isTrusted && e.target.closest('app-book-reader .book-content,app-book-reader .tap-to-paginate')) {
       e.preventDefault(); e.stopImmediatePropagation();
     }
+  }, true);
+
+  // Optional height-based paging. Keep the native middle/menu behavior and
+  // route both mouse clicks and touch-generated clicks through native buttons.
+  const tapPreferences = new Map();
+  const tapInteractive = interactive + ',.bookmark-overlay,app-epub-highlight,[kavita-part],[onclick]';
+  let tap = null, settingsScheduled = false;
+  function preferenceKey() {
+    try {
+      const user = JSON.parse(localStorage.getItem('kavita-user') || 'null');
+      return 'kavita-height-tap-zones-v1:' + encodeURIComponent(user?.username || 'guest');
+    } catch { return 'kavita-height-tap-zones-v1:guest'; }
+  }
+  function tapEnabled() {
+    const key = preferenceKey();
+    if (tapPreferences.has(key)) return tapPreferences.get(key);
+    try { return localStorage.getItem(key) === 'true'; } catch { return false; }
+  }
+  function refreshTapSettings() {
+    settingsScheduled = false;
+    const enabled = tapEnabled();
+    for (const root of document.querySelectorAll('app-book-reader')) {
+      // Only disable the native side overlays in paginated EPUB mode.
+      root.classList.toggle('kv-height-tap-zones', enabled && !!root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2'));
+    }
+    for (const settings of document.querySelectorAll('app-epub-setting-drawer app-reader-settings')) {
+      const fontRow = settings.querySelector('#fontsize')?.closest('.controls');
+      if (!fontRow) continue;
+      let control = settings.querySelector('[data-kavita-height-tap-zones]');
+      if (!control) {
+        const row = document.createElement('div');
+        row.className = 'controls my-3';
+        row.innerHTML = '<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-height-tap-zones><span class="form-check-label">높이에 따라 페이지 넘기기</span></label><small class="d-block text-muted">좌우 각 20% 영역: 위쪽 1/3은 이전, 아래쪽 2/3은 다음 페이지. 가운데는 기존 메뉴 동작을 유지합니다. 설정은 이 브라우저에 저장됩니다.</small>';
+        fontRow.after(row);
+        control = row.querySelector('input');
+        control.addEventListener('change', () => {
+          const key = preferenceKey();
+          tapPreferences.set(key, control.checked);
+          try { localStorage.setItem(key, String(control.checked)); } catch {}
+          tap = null;
+          refreshTapSettings();
+        });
+      }
+      control.checked = enabled;
+    }
+  }
+  function scheduleTapSettings() {
+    if (!settingsScheduled) { settingsScheduled = true; requestAnimationFrame(refreshTapSettings); }
+  }
+  new MutationObserver(scheduleTapSettings).observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['class']});
+  window.addEventListener('storage', event => {
+    if (event.key === null || event.key === preferenceKey() || event.key === 'kavita-user') {
+      tapPreferences.clear(); tap = null; scheduleTapSettings();
+    }
+  });
+  refreshTapSettings();
+  document.addEventListener('pointerdown', event => {
+    tap = null;
+    if (!tapEnabled() || !event.isPrimary || event.button !== 0 || turning) return;
+    const root = event.target.closest('app-book-reader');
+    if (!root || !event.target.closest('.reading-section,.tap-to-paginate') || event.target.closest(tapInteractive) || blocked(root) ||
+        !root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2')) return;
+    tap = {root, id: event.pointerId, x: event.clientX, y: event.clientY, time: performance.now()};
+  }, {capture: true, passive: true});
+  document.addEventListener('pointermove', event => {
+    if (tap && (event.pointerId !== tap.id || Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > 10)) tap = null;
+  }, {capture: true, passive: true});
+  for (const type of ['pointercancel', 'touchcancel']) document.addEventListener(type, () => { tap = null; }, {capture: true, passive: true});
+  document.addEventListener('touchstart', event => { if (event.touches.length !== 1) tap = null; }, {capture: true, passive: true});
+  document.addEventListener('click', event => {
+    if (!event.isTrusted || event.detail === 0) return;
+    const start = tap; tap = null;
+    if (!start || !tapEnabled() || turning || performance.now() - start.time > 1200 || performance.now() - lastTurn < 650 ||
+        Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10 || blocked(start.root) ||
+        event.target.closest(tapInteractive) || event.target.closest('app-book-reader') !== start.root ||
+        !event.target.closest('.reading-section,.tap-to-paginate') ||
+        !start.root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2')) return;
+    if (event.clientX >= innerWidth * .2 && event.clientX <= innerWidth * .8) return;
+    const direction = event.clientY < innerHeight / 3 ? 'prev' : 'next';
+    event.preventDefault(); event.stopImmediatePropagation();
+    suppressUntil = performance.now() + 500;
+    void turnPage(start.root, direction);
   }, true);
 })();
 

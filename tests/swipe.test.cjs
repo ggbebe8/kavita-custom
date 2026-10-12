@@ -15,10 +15,10 @@ function scenario(options = {}) {
     return q.includes('is-loading') ? options.loading : !options.scroll;
   }, querySelectorAll: () => menuOpen && !options.missingButtons ? [next,prev] : []};
   const target = {closest: q => q === 'app-book-reader' ? options.pdf ? null : root : q.includes('book-content') ? {} : options.input};
-  const document = {dispatchEvent(){},querySelector:()=>null,createElement:()=>({setAttribute(){}}),head:{appendChild(){}},body:{appendChild(){}},activeElement: {matches: q => options.focus || (options.buttonFocus && q.includes('button'))}, querySelectorAll: q => options.popup || (options.savedHighlight && q.includes('app-epub-highlight')) ? [{getClientRects:()=>[1]}] : [],
+  const document = {dispatchEvent(){},querySelector:()=>null,createElement:()=>({setAttribute(){}}),head:{appendChild(){}},body:{appendChild(){}},activeElement: {matches: q => options.focus || (options.buttonFocus && q.includes('button'))}, querySelectorAll: q => q === 'app-book-reader' || q === 'app-epub-setting-drawer app-reader-settings' ? [] : options.popup || (options.savedHighlight && q.includes('app-epub-highlight')) ? [{getClientRects:()=>[1]}] : [],
     addEventListener: (type, fn) => (handlers[type] ??= []).push(fn)};
-  const window = {__kavitaBookmarkAffordanceInstalled:true,__kavitaFullscreenButtonInstalled:true,__kavitaPageIndicatorInstalled:true,setInterval(){},getSelection: () => ({toString:()=>selection})};
-  vm.runInNewContext(code, {navigator:{userAgent:options.userAgent ?? 'Android'}, window,document, performance:{now:()=>now}, innerWidth:400,Event:class {constructor(type){this.type=type;}},MouseEvent:class {constructor(type){this.type=type;}},requestAnimationFrame: fn=>queueMicrotask(fn),getComputedStyle:()=>({visibility:'visible'})});
+  const window = {addEventListener(){},__kavitaBookmarkAffordanceInstalled:true,__kavitaFullscreenButtonInstalled:true,__kavitaPageIndicatorInstalled:true,setInterval(){},getSelection: () => ({toString:()=>selection})};
+  vm.runInNewContext(code, {MutationObserver:class{observe(){}},navigator:{userAgent:options.userAgent ?? 'Android'}, window,document, performance:{now:()=>now}, innerWidth:400,Event:class {constructor(type){this.type=type;}},MouseEvent:class {constructor(type){this.type=type;}},requestAnimationFrame: fn=>queueMicrotask(fn),getComputedStyle:()=>({visibility:'visible'})});
   const touch = (x,y=100,id=1) => ({clientX:x,clientY:y,identifier:id});
   const fire = (type,touches,changed=[]) => (handlers[type]??[]).forEach(f=>f({target,touches,changedTouches:changed,preventDefault(){},stopImmediatePropagation(){}}));
   const swipe = (x=280,end=150,y=100) => {fire('touchstart',[touch(x)]);now+=100;fire('touchmove',[touch(end,y)]);fire('touchend',[],[touch(end,y)]);};
