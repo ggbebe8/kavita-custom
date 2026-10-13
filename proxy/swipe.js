@@ -90,43 +90,46 @@
   }
   document.addEventListener('touchstart', e => {
     gesture = null;
-    if (turning || e.touches.length !== 1 || performance.now() - lastTurn < 650) return;
+    if (e.touches.length !== 1) return;
     const root = e.target.closest('app-book-reader');
-    if (!root || !e.target.closest('.book-content,.tap-to-paginate') || e.target.closest(interactive) || blocked(root)) return;
+    if (!root || !e.target.closest('.book-content,.tap-to-paginate') || e.target.closest(interactive) || blocked(root,true)) return;
     if (!root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2')) return;
     const t = e.touches[0];
-    if (t.clientX < 32 || t.clientX > innerWidth - 32) return;
+    if (t.clientX < 32 || t.clientX > innerWidth - 32) {pendingTurns.length=0;return;}
     const {next, prev} = buttons(root);
-    if ((!next || !prev || !visible(next) || !visible(prev)) && !hiddenMenu(root)) return;
+    if ((!next || !prev || !visible(next) || !visible(prev)) && !hiddenMenu(root) && !root.classList.contains('swipe-restoring-menu')) return;
     gesture = {root, id: t.identifier, x: t.clientX, y: t.clientY, time: performance.now()};
   }, {passive: true, capture: true});
   document.addEventListener('touchmove', e => {
     if (!gesture) return;
-    if (e.touches.length !== 1 || blocked(gesture.root)) { gesture = null; return; }
+    if (e.touches.length !== 1 || blocked(gesture.root,true)) { gesture = null; return; }
     const t = e.touches[0];
     const dx=Math.abs(t.clientX-gesture.x),dy=Math.abs(t.clientY-gesture.y);
-    if (dy > 35 || performance.now() - gesture.time > 1200) { gesture = null; return; }
+    if (dy > 35 || performance.now() - gesture.time > 1200) { gesture = null;pendingTurns.length=0; return; }
     if (dx >= 20 && dx >= dy * 2 && e.cancelable) e.preventDefault();
   }, {passive: false, capture: true});
-  document.addEventListener('selectionchange', () => { if (selected()) {gesture = null; pendingTaps.length = 0;} });
+  document.addEventListener('selectionchange', () => { if (selected()) {gesture = null; pendingTurns.length = 0;} });
   document.addEventListener('touchcancel', () => { gesture = null; }, {passive: true});
   document.addEventListener('touchend', e => {
     const g = gesture; gesture = null;
-    if (!g || e.touches.length || e.changedTouches.length !== 1 || blocked(g.root)) return;
+    if (!g || e.touches.length || e.changedTouches.length !== 1 || blocked(g.root,true)) return;
     const t = e.changedTouches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
     if (t.identifier !== g.id || performance.now() - g.time > 1200 || Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 2 || Math.abs(dy) > 35) return;
     const b = buttons(g.root)[dx < 0 ? 'next' : 'prev'];
-    if ((!b || b.disabled || !visible(b)) && !hiddenMenu(g.root)) return;
+    if ((!b || b.disabled || !visible(b)) && !hiddenMenu(g.root) && !g.root.classList.contains('swipe-restoring-menu')) return;
     lastTurn = performance.now(); suppressUntil = lastTurn + 650;
     e.preventDefault(); e.stopImmediatePropagation();
-    void turnPage(g.root, dx < 0 ? 'next' : 'prev');
+    queueTurn(g.root, dx < 0 ? 'next' : 'prev','swipe');
   }, {passive: false, capture: true});
   document.addEventListener('click', e => {
     if ((turning || performance.now() < suppressUntil) && e.isTrusted &&
         e.target.closest('app-book-reader .book-content,app-book-reader .tap-to-paginate') && !e.target.closest(interactive)) {
       // A fresh, stationary pointer press is a new tap, not the click that
       // some browsers generate after a swipe. Do not discard it on a timer.
-      if (validTapClick(e) && (!turning || sideTap(e.clientX))) return;
+      if (validTapClick(e,tap,false)) {
+        if (!tapEnabled() || !sideTap(e.clientX)) pendingTurns.length=0;
+        if (!turning || (tapEnabled() && sideTap(e.clientX))) return;
+      }
       e.preventDefault(); e.stopImmediatePropagation();
     }
   }, true);
@@ -135,36 +138,36 @@
   // route both mouse clicks and touch-generated clicks through native buttons.
   const tapPreferences = new Map();
   const tapInteractive = interactive + ',.bookmark-overlay,app-epub-highlight,[kavita-part],[onclick]';
-  const pendingTaps = [];
-  let drainingTaps = false;
+  const pendingTurns = [];
+  let drainingTurns = false;
   let tap = null, settingsScheduled = false;
   const sideTap = x => x < innerWidth * .2 || x > innerWidth * .8;
-  function validTapClick(event, start = tap) {
-    return !!(start && tapEnabled() && event.isTrusted && event.detail !== 0 &&
+  function validTapClick(event, start = tap, requireOption = true) {
+    return !!(start && (!requireOption || tapEnabled()) && event.isTrusted && event.detail !== 0 &&
       performance.now()-start.time <= 1200 && Math.hypot(event.clientX-start.x,event.clientY-start.y) <= 10 &&
       !blocked(start.root,true) && !event.target.closest(tapInteractive) &&
       event.target.closest('app-book-reader')===start.root && event.target.closest('.reading-section,.tap-to-paginate') &&
       start.root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2'));
   }
-  async function drainTaps() {
-    if (drainingTaps) return;
-    drainingTaps = true;
+  async function drainTurns() {
+    if (drainingTurns) return;
+    drainingTurns = true;
     try {
-      while (pendingTaps.length) {
+      while (pendingTurns.length) {
         if (turning) {await new Promise(resolve=>setTimeout(resolve,25));continue;}
-        const next = pendingTaps.shift();
-        if (!tapEnabled() || blocked(next.root,true) || !next.root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2') ||
-            location.href!==next.url || performance.now()-next.time>10000) {pendingTaps.length=0;break;}
+        const next = pendingTurns.shift();
+        if ((next.kind==='tap' && !tapEnabled()) || blocked(next.root,true) || !next.root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2') ||
+            location.href!==next.url || performance.now()-next.time>10000) {pendingTurns.length=0;break;}
         if (next.root.querySelector('.reading-section.is-loading')) {
-          pendingTaps.unshift(next);await new Promise(resolve=>setTimeout(resolve,50));continue;
+          pendingTurns.unshift(next);await new Promise(resolve=>setTimeout(resolve,50));continue;
         }
         await turnPage(next.root,next.direction);
       }
-    } finally {drainingTaps=false;}
+    } finally {drainingTurns=false;}
   }
-  function queueTap(root,direction) {
-    if (pendingTaps.length<3) pendingTaps.push({root,direction,url:location.href,time:performance.now()});
-    void drainTaps();
+  function queueTurn(root,direction,kind='tap') {
+    if (pendingTurns.length<3) pendingTurns.push({root,direction,kind,url:location.href,time:performance.now()});
+    void drainTurns();
   }
   function preferenceKey() {
     try {
@@ -199,7 +202,7 @@
           tapPreferences.set(key, control.checked);
           try { localStorage.setItem(key, String(control.checked)); } catch {}
           tap = null;
-          pendingTaps.length = 0;
+          pendingTurns.length = 0;
           refreshTapSettings();
         });
       }
@@ -212,34 +215,40 @@
   new MutationObserver(scheduleTapSettings).observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['class']});
   window.addEventListener('storage', event => {
     if (event.key === null || event.key === preferenceKey() || event.key === 'kavita-user') {
-      tapPreferences.clear(); tap = null; pendingTaps.length = 0; scheduleTapSettings();
+      tapPreferences.clear(); tap = null; pendingTurns.length = 0; scheduleTapSettings();
     }
   });
   refreshTapSettings();
   document.addEventListener('pointerdown', event => {
     tap = null;
-    if (!tapEnabled() || !event.isPrimary || event.button !== 0) {pendingTaps.length=0;return;}
+    if (!event.isPrimary || event.button !== 0) {pendingTurns.length=0;return;}
     const root = event.target.closest('app-book-reader');
     if (!root || !event.target.closest('.reading-section,.tap-to-paginate') || event.target.closest(tapInteractive) || blocked(root,true) ||
-        !root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2')) {pendingTaps.length=0;return;}
-    if (!sideTap(event.clientX)) pendingTaps.length=0;
+        !root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2')) {pendingTurns.length=0;return;}
+    // Defer middle-tap cancellation until click: a touch starting in the
+    // middle may instead become another horizontal swipe.
+    if (!tapEnabled() && event.pointerType!=='touch') pendingTurns.length=0;
     tap = {root, id: event.pointerId, x: event.clientX, y: event.clientY, time: performance.now()};
   }, {capture: true, passive: true});
   document.addEventListener('pointermove', event => {
-    if (tap && (event.pointerId !== tap.id || Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > 10)) {tap = null;pendingTaps.length=0;}
+    if (tap && (event.pointerId !== tap.id || Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > 10)) {
+      const dx=gesture&&Math.abs(event.clientX-gesture.x),dy=gesture&&Math.abs(event.clientY-gesture.y);
+      if (!gesture || dy>35 || dx<dy*2 || performance.now()-gesture.time>1200) pendingTurns.length=0;
+      tap=null;
+    }
   }, {capture: true, passive: true});
-  for (const type of ['pointercancel', 'touchcancel']) document.addEventListener(type, () => { tap = null; pendingTaps.length=0; }, {capture: true, passive: true});
-  document.addEventListener('touchstart', event => { if (event.touches.length !== 1) {tap = null;pendingTaps.length=0;} }, {capture: true, passive: true});
-  document.addEventListener('keydown',event=>{if(event.isTrusted)pendingTaps.length=0;},true);
+  for (const type of ['pointercancel', 'touchcancel']) document.addEventListener(type, () => { tap = null; pendingTurns.length=0; }, {capture: true, passive: true});
+  document.addEventListener('touchstart', event => { if (event.touches.length !== 1) {tap = null;pendingTurns.length=0;} }, {capture: true, passive: true});
+  document.addEventListener('keydown',event=>{if(event.isTrusted)pendingTurns.length=0;},true);
   document.addEventListener('click', event => {
     if (!event.isTrusted || event.detail === 0) return;
     const start = tap; tap = null;
     if (!validTapClick(event,start)) return;
-    if (event.clientX >= innerWidth * .2 && event.clientX <= innerWidth * .8) return;
+    if (event.clientX >= innerWidth * .2 && event.clientX <= innerWidth * .8) {pendingTurns.length=0;return;}
     const direction = event.clientY < innerHeight / 3 ? 'prev' : 'next';
     event.preventDefault(); event.stopImmediatePropagation();
     suppressUntil = performance.now() + 650;
-    queueTap(start.root, direction);
+    queueTurn(start.root, direction);
   }, true);
 })();
 

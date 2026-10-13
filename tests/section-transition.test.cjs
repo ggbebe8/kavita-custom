@@ -27,13 +27,13 @@ const assert=require('node:assert/strict');
   await page.evaluate(()=>window.swipe('next'));
   await page.waitForFunction(()=>document.querySelector('.reading-section').classList.contains('is-loading'));
   await page.evaluate(()=>window.swipe('next'));
-  await page.waitForFunction(()=>!document.querySelector('.reading-section').classList.contains('is-loading')&&!document.querySelector('.reader-header'));
-  assert.deepEqual(await page.evaluate(()=>window.moves),['next']);
+  await page.waitForFunction(()=>window.moves.length===2&&!document.querySelector('.reading-section').classList.contains('is-loading')&&!document.querySelector('.reader-header')&&!document.querySelector('.swipe-restoring-menu'));
+  assert.deepEqual(await page.evaluate(()=>window.moves),['next','next']);
   let changes=await page.evaluate(()=>window.menuChanges);assert.equal(changes[1].loading,false);assert.equal(changes[1].text,'New section next');
   await page.waitForTimeout(700);await page.evaluate(()=>window.swipe('prev'));
-  await page.waitForFunction(()=>window.moves.length===2&&!document.querySelector('.reading-section').classList.contains('is-loading')&&!document.querySelector('.reader-header'));
-  changes=await page.evaluate(()=>window.menuChanges);assert.equal(changes[3].loading,false);assert.equal(changes[3].text,'New section prev');
-  assert.deepEqual(await page.evaluate(()=>window.moves),['next','prev']);assert.deepEqual(errors,[]);
+  await page.waitForFunction(()=>window.moves.length===3&&!document.querySelector('.reading-section').classList.contains('is-loading')&&!document.querySelector('.reader-header'));
+  changes=await page.evaluate(()=>window.menuChanges);assert.equal(changes[5].loading,false);assert.equal(changes[5].text,'New section prev');
+  assert.deepEqual(await page.evaluate(()=>window.moves),['next','next','prev']);assert.deepEqual(errors,[]);
   console.log('Section transition Chromium tests passed: next/previous async section loading, no double turn, menu restored on new content after loading.');
  } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
