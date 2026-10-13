@@ -202,3 +202,9 @@ HTTPS 추가만 롤백하려면 현재 Caddyfile에서 관리 표시된 Kavita �
 docker exec livesync-caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 docker exec livesync-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
 ```
+
+### 2026-10-14 집중 모드 터치 유지 보완
+
+연속 넘김 제한 650ms와 클릭 차단 500ms 사이의 틈에서 터치가 기본 메뉴 토글로 전달되는 문제를 Chromium 터치 입력으로 재현했습니다. 클릭 차단을 650ms로 맞추고, 페이지 전환 중의 본문 클릭도 차단합니다. 링크/입력/버튼의 기존 조작은 제외합니다.
+
+장 로딩이 5초를 넘으면 임시 메뉴 가림을 해제하던 제한도 제거했습니다. 로딩 완료 또는 리더 종료까지 가림을 유지하며, 완료 후 숨김 상태로 복구합니다. 빠른 재터치, 5.5초 장 로딩, 로딩 중 재터치, 이후 의도적인 가운데 메뉴 탭, 기존 스와이프와 페이지 번호 이동을 테스트했습니다. 실제 Android에서는 새로고침 또는 PWA 재실행 후 확인하세요.

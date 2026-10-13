@@ -73,8 +73,9 @@
       // Do not toggle the old content while the next section is still loading.
       if (restore) {
         await frame();
-        const deadline = performance.now() + 5000;
-        while (root.isConnected && root.querySelector('.reading-section.is-loading') && performance.now() < deadline) await frame();
+        // Loading can exceed five seconds (especially image sections). Keep
+        // the temporary menu masked until loading actually finishes or exits.
+        while (root.isConnected && root.querySelector('.reading-section.is-loading')) await new Promise(resolve => setTimeout(resolve, 50));
       }
       if (restore && root.isConnected && !root.querySelector('.reading-section.is-loading') && root.querySelector('.reader-header') && !selected() && ![...document.querySelectorAll(overlays)].some(visible)) {
         toggleMenu(root);
@@ -83,7 +84,7 @@
       root.classList.remove('swipe-restoring-menu');
       turning = false;
       lastTurn = performance.now();
-      suppressUntil = lastTurn + 500;
+      suppressUntil = lastTurn + 650;
     }
   }
   document.addEventListener('touchstart', e => {
@@ -115,12 +116,13 @@
     if (t.identifier !== g.id || performance.now() - g.time > 1200 || Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 2 || Math.abs(dy) > 35) return;
     const b = buttons(g.root)[dx < 0 ? 'next' : 'prev'];
     if ((!b || b.disabled || !visible(b)) && !hiddenMenu(g.root)) return;
-    lastTurn = performance.now(); suppressUntil = lastTurn + 500;
+    lastTurn = performance.now(); suppressUntil = lastTurn + 650;
     e.preventDefault(); e.stopImmediatePropagation();
     void turnPage(g.root, dx < 0 ? 'next' : 'prev');
   }, {passive: false, capture: true});
   document.addEventListener('click', e => {
-    if (performance.now() < suppressUntil && e.isTrusted && e.target.closest('app-book-reader .book-content,app-book-reader .tap-to-paginate')) {
+    if ((turning || performance.now() < suppressUntil) && e.isTrusted &&
+        e.target.closest('app-book-reader .book-content,app-book-reader .tap-to-paginate') && !e.target.closest(interactive)) {
       e.preventDefault(); e.stopImmediatePropagation();
     }
   }, true);
@@ -203,7 +205,7 @@
     if (event.clientX >= innerWidth * .2 && event.clientX <= innerWidth * .8) return;
     const direction = event.clientY < innerHeight / 3 ? 'prev' : 'next';
     event.preventDefault(); event.stopImmediatePropagation();
-    suppressUntil = performance.now() + 500;
+    suppressUntil = performance.now() + 650;
     void turnPage(start.root, direction);
   }, true);
 })();
