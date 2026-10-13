@@ -24,8 +24,10 @@ function scenario(options = {}) {
   const swipe = (x=280,end=150,y=100) => {fire('touchstart',[touch(x)]);now+=100;fire('touchmove',[touch(end,y)]);fire('touchend',[],[touch(end,y)]);};
   return {turns,toggles,swipe,fire,touch,select:()=>{selection='text';fire('selectionchange',[])},advance:()=>{now+=700}};
 }
-let s=scenario();s.swipe();assert.deepEqual(s.turns,['next']);s.swipe();assert.equal(s.turns.length,1);s.advance();s.swipe(120,260);assert.deepEqual(s.turns,['next','prev']);
-for (const userAgent of ['Android', 'Windows', 'Ubuntu', '']) {s=scenario({userAgent});s.swipe();s.advance();s.swipe(120,260);assert.deepEqual(s.turns,['next','prev'],userAgent);}
+(async()=>{
+const settle=()=>new Promise(resolve=>setImmediate(resolve));
+let s=scenario();s.swipe();assert.deepEqual(s.turns,['next']);s.swipe();assert.equal(s.turns.length,1);await settle();s.advance();s.swipe(120,260);assert.deepEqual(s.turns,['next','prev']);
+for (const userAgent of ['Android', 'Windows', 'Ubuntu', '']) {s=scenario({userAgent});s.swipe();await settle();s.advance();s.swipe(120,260);assert.deepEqual(s.turns,['next','prev'],userAgent);}
 s=scenario();s.fire('mousedown',[]);s.fire('mousemove',[]);s.fire('mouseup',[]);s.fire('keydown',[]);assert.equal(s.turns.length,0,'mouse and keyboard do not trigger swipe');
 for (const option of ['buttonFocus','savedHighlight']) {s=scenario({[option]:true});s.swipe();assert.deepEqual(s.turns,['next'],option);}
 for (const key of ['scroll','pdf','input','focus','popup','loading','disabled','hidden']) {s=scenario({[key]:true});s.swipe();assert.equal(s.turns.length,0,key);}
@@ -54,3 +56,5 @@ s=scenario();s.fire('touchstart',[s.touch(280)]);s.fire('touchcancel',[]);s.fire
 console.log('Swipe gesture and exclusion tests passed (mock DOM; no real device validation).');
 
 s=scenario();s.fire('touchstart',[s.touch(280)]);s.advance();s.fire('touchmove',[s.touch(150)]);s.fire('touchend',[],[s.touch(150)]);assert.deepEqual(s.turns,['next'],'700ms swipe remains valid');
+
+})().catch(error=>{console.error(error);process.exitCode=1});

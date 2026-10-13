@@ -65,7 +65,7 @@ const assert=require('node:assert/strict');
   await page.evaluate(()=>addMenu());
   await page.waitForTimeout(700);await page.touchscreen.tap(830,400);await page.waitForTimeout(100);
   assert.equal((await moves()).at(-1),'next','real Chromium touch tap');
-  count=(await moves()).length;await page.touchscreen.tap(830,400);assert.equal((await moves()).length,count,'rapid repeat guarded');
+  count=(await moves()).length;await page.touchscreen.tap(830,400);await page.waitForFunction(count=>moves.length===count+1,count);assert.equal((await moves()).length,count+1,'fresh rapid tap accepted');
   await page.waitForTimeout(700);
   const cdp=await page.context().newCDPSession(page);
   await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:450,y:400}]});
