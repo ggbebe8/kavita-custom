@@ -686,7 +686,10 @@
     if (info.type==='progress') {
       try {
         const data=JSON.parse(text);
-        if(!readingSnapshots.has(info.id)&&Number.isInteger(data.pageNum)&&(data.bookScrollId==null||typeof data.bookScrollId==='string'))
+        // Native get-progress is a fresh reader initialization (including SPA
+        // re-entry). Its result becomes the position Kavita actually opens.
+        // Preflight checks use nativeFetch and never reach this observer.
+        if(Number.isInteger(data.pageNum)&&(data.bookScrollId==null||typeof data.bookScrollId==='string'))
           readingSnapshots.set(info.id,{position:data,headers:new Headers(headers),checked:-Infinity});
         if(info.epoch!==navigationEpoch)return;
         const match=typeof data.bookScrollId==='string'&&data.bookScrollId.match(resumePattern);

@@ -20,8 +20,14 @@ const assert=require('node:assert/strict');
   const [a,b]=pages;
   const save=(page,n)=>page.evaluate(n=>fetch('/api/reader/progress',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chapterId:1,pageNum:n,bookScrollId:`//body/p[${n+1}]`})}).then(r=>r.status).catch(e=>e.name),n);
   assert.equal(await save(b,40),200);
+  // SPA back/continue-reading does not reload our script. Native initial GET
+  // must adopt B's latest position, rather than keep A's previous baseline.
+  await a.evaluate(()=>fetch('/api/reader/get-progress?chapterId=1').then(r=>r.json()));
+  assert.equal(await save(a,40),200,'re-entering at latest position must not prompt');
+  assert.equal(await a.locator('#kavita-reading-sync-dialog').count(),0);
+  await save(b,41);
   const pending=save(a,33);
-  await a.locator('#kavita-reading-sync-dialog').waitFor();assert.equal(writes,1,'stale A save must be held');
+  await a.locator('#kavita-reading-sync-dialog').waitFor();assert.equal(writes,3,'stale A save must be held');
   await a.getByRole('button',{name:'여기서 계속 읽기'}).click();assert.equal(await pending,200);assert.equal(progress.pageNum,33);
   assert.equal(await save(a,34),200,'own writes must not cause prompts');
   const next=save(b,41);await b.locator('#kavita-reading-sync-dialog').waitFor();
