@@ -19,5 +19,24 @@ const {chromium}=require('playwright');const {readFileSync}=require('node:fs');c
  await page.evaluate(()=>document.dispatchEvent(new Event('kavita-page-navigation')));assert.equal(await page.evaluate(()=>ttsCalls.at(-1)),'cancel');
  await page.locator('[data-kavita-tts]').click();assert.equal(await page.getByRole('slider').inputValue(),'1.4');await page.getByRole('button',{name:'재생',exact:true}).click();
  await page.evaluate(()=>{window.oldUtterance=lastUtterance;document.querySelector('app-book-reader').remove();});await page.waitForTimeout(100);const count=await page.evaluate(()=>ttsCalls.length);await page.evaluate(()=>oldUtterance.onend());assert.equal(await page.evaluate(()=>ttsCalls.length),count,'stale callbacks cannot restart after reader exit');
- assert.deepEqual(errors,[]);console.log('Browser TTS UI passed with mocked speech engine: voices/rate, text filtering, chunk sequencing, pause/resume, close, navigation/exit cancellation. Real device audio was not tested.');
+ await page.goto('http://tts.test/');await page.addScriptTag({content:readFileSync('proxy/swipe.js','utf8')});
+ await page.evaluate(()=>{
+  const root=document.querySelector('app-book-reader'),content=root.querySelector('.book-content');
+  const reader=document.createElement('div');reader.className='reader-container';reader.style.width='400px';
+  const section=document.createElement('div');section.className='reading-section column-layout-1';root.append(reader);reader.append(section);section.append(content);
+  content.style.cssText='width:400px;height:80px;max-height:80px;column-count:1;column-gap:20px;font:16px/20px sans-serif;overflow:hidden';
+  content.innerHTML='<p>'+('자동 페이지와 하이라이트 테스트 문장입니다. '.repeat(300))+'</p>';
+ });
+ await page.locator('[data-kavita-tts]').click();await page.getByRole('button',{name:'재생',exact:true}).click();await page.getByRole('button',{name:'닫기',exact:true}).click();
+ await page.waitForFunction(()=>!!CSS.highlights.get('kavita-tts-current'));
+ for(let i=0;i<15&&(await page.evaluate(()=>document.querySelector('.book-content').scrollLeft))===0;i++){
+  const previous=await page.evaluate(()=>ttsCalls.filter(c=>typeof c==='object').length);
+  await page.evaluate(()=>lastUtterance.onend());await page.waitForFunction(n=>ttsCalls.filter(c=>typeof c==='object').length>n,previous);
+ }
+ assert.ok(await page.evaluate(()=>document.querySelector('.book-content').scrollLeft>0),'speech automatically follows into later screen pages');
+ await page.evaluate(()=>lastUtterance.onboundary({charIndex:5,charLength:3}));await page.waitForTimeout(100);
+ assert.equal(await page.evaluate(()=>[...CSS.highlights.get('kavita-tts-current')][0].toString().length),3,'word boundary highlights exact spoken text');
+ await page.evaluate(()=>{const content=document.querySelector('.book-content');content.scrollLeft=0;content.dispatchEvent(new Event('scroll',{bubbles:true}));});
+ assert.equal(await page.evaluate(()=>CSS.highlights.has('kavita-tts-current')),false,'manual navigation clears speech highlight');
+ assert.deepEqual(errors,[]);console.log('Browser TTS UI passed with mocked speech engine: voices/rate, text filtering, chunk sequencing, pause/resume, close, navigation/exit cancellation, automatic screen following, exact word highlight and cleanup. Real device audio was not tested.');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
