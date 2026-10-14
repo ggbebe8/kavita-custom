@@ -1011,7 +1011,7 @@
     range.setEnd(last.node,last.offset+Math.min(last.end-last.start,Math.max(0,end-last.start)));
     return range;
   }
-  async function follow(range,id) {
+  async function follow(range,id,highlightRange=range) {
     if(!range||id!==token||!session)return false;
     const owner=session,content=owner.content,rect=range.getClientRects()[0];if(!rect)return true;
     const view=content.getBoundingClientRect(),vertical=content.classList.contains('writing-style-vertical');
@@ -1020,8 +1020,8 @@
     const size=vertical?parseFloat(content.style.maxHeight)-20:(reader?.offsetWidth||content.clientWidth)-2*(parseFloat(css.marginLeft)||0)+20;
     let left=content.scrollLeft,top=content.scrollTop;
     if(column&&size>0){
-      if(vertical&&(rect.top<view.top||rect.top>=view.bottom))top=Math.max(0,Math.floor((top+rect.top-view.top)/size)*size);
-      else if(!vertical&&(rect.left<view.left-1||rect.left>=view.right-1))left=Math.max(0,Math.floor((left+rect.left-view.left)/size)*size);
+      if(vertical&&(rect.top<view.top||rect.top>=view.bottom))top=Math.max(0,Math.floor((top+rect.top-view.top+2)/size)*size);
+      else if(!vertical&&(rect.left<view.left-1||rect.left>=view.right-1))left=Math.max(0,Math.floor((left+rect.left-view.left+2)/size)*size);
     } else if(rect.top<view.top||rect.top>=view.bottom)top=Math.max(0,top+rect.top-view.top);
     if(Math.abs(left-content.scrollLeft)>1||Math.abs(top-content.scrollTop)>1){
       if(following)return true;following=true;
@@ -1035,9 +1035,9 @@
     }
     if(id!==token||session!==owner)return false;
     clearHighlight();
-    if(window.Highlight&&window.CSS?.highlights)CSS.highlights.set(highlightName,new Highlight(range));
+    if(window.Highlight&&window.CSS?.highlights)CSS.highlights.set(highlightName,new Highlight(highlightRange));
     else {
-      const box=range.getClientRects()[0];
+      const box=highlightRange.getClientRects()[0];
       if(box){const overlay=document.createElement('div');overlay.id='kavita-tts-highlight-fallback';overlay.setAttribute('aria-hidden','true');overlay.style.cssText=`position:fixed;pointer-events:none;z-index:1000;background:#ffe06666;left:${box.left}px;top:${box.top}px;width:${box.width}px;height:${box.height}px`;document.body.append(overlay);}
     }
     return true;
@@ -1062,12 +1062,34 @@
     if(!session.root.isConnected||session.content!==session.root.querySelector('.book-content')){stop();return;}
     if(!session.chunks.length){stop('현재 장의 읽기가 끝났습니다. 다음 장에서 다시 재생하세요.');return;}
     const chunk=session.chunks.shift();
-    if(!await follow(textRange(chunk.start,chunk.end),id)||id!==token||!session)return;
-    const item=new SpeechSynthesisUtterance(chunk.text);utterance=item;
+    while(chunk.start<chunk.end&&/\s/.test(session.text[chunk.start]))chunk.start++;
+    if(chunk.start>=chunk.end){void speakNext(id);return;}
+    // Never rely on boundary events to cross a screen. Some Android voices
+    // provide none. Split each sentence at its actual rendered page boundary.
+    const pageAt=offset=>{
+      const range=textRange(offset,offset+1),rect=range?.getClientRects()[0];if(!rect)return 0;
+      const content=session.content,view=content.getBoundingClientRect(),css=getComputedStyle(content);
+      const vertical=content.classList.contains('writing-style-vertical');
+      const column=session.root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2');
+      const size=column?(vertical?parseFloat(content.style.maxHeight)-20:(session.root.querySelector('.reader-container')?.offsetWidth||content.clientWidth)-2*(parseFloat(css.marginLeft)||0)+20):content.clientHeight;
+      return size>0?Math.floor(((vertical||!column?content.scrollTop+rect.top-view.top:content.scrollLeft+rect.left-view.left)+2)/size):0;
+    };
+    let end=Math.min(chunk.end,chunk.start+220);
+    const startPage=pageAt(chunk.start);
+    if(pageAt(end-1)>startPage){
+      let lo=chunk.start+1,hi=end;
+      while(lo<hi){const mid=Math.floor((lo+hi)/2);if(pageAt(mid)>startPage)hi=mid;else lo=mid+1;}
+      end=lo;
+    }
+    if(end<chunk.end)session.chunks.unshift({...chunk,start:end});
+    const text=session.text.slice(chunk.start,end);
+    const sentenceRange=textRange(chunk.sentenceStart,chunk.sentenceEnd);
+    if(!await follow(textRange(chunk.start,chunk.start+1),id,sentenceRange)||id!==token||!session)return;
+    const item=new SpeechSynthesisUtterance(text);utterance=item;
     item.onboundary=event=>{
-      if(id!==token||!Number.isInteger(event.charIndex)||event.charIndex>=chunk.text.length)return;
-      const length=event.charLength>0?event.charLength:(chunk.text.slice(event.charIndex).match(/^\S+/)?.[0].length||1);
-      void follow(textRange(chunk.start+event.charIndex,Math.min(chunk.end,chunk.start+event.charIndex+length)),id).catch(()=>{if(id===token)stop('읽기 위치를 표시하지 못해 정지했습니다.');});
+      if(id!==token||!Number.isInteger(event.charIndex)||event.charIndex>=text.length)return;
+      const position=chunk.start+event.charIndex;
+      void follow(textRange(position,position+1),id,textRange(chunk.sentenceStart,chunk.sentenceEnd)).catch(()=>{if(id===token)stop('읽기 위치를 표시하지 못해 정지했습니다.');});
     };
     const available=synth.getVoices();
     item.voice=available.find(v=>v.voiceURI===settings.voice)||available.find(v=>v.lang.toLowerCase().startsWith(session.lang.toLowerCase()))||null;
@@ -1115,8 +1137,15 @@
     if(!content||root.querySelector('.is-loading')){announce('본문을 불러온 후 다시 재생하세요.');return;}
     const {text,entries}=readingText(content);if(!text.trim()){announce('읽을 수 있는 본문 텍스트가 없습니다.');return;}
     stop();
-    const chunks=[...text.matchAll(/[\s\S]{1,220}(?:\s|$)|[\s\S]{1,220}/g)].filter(m=>m[0].trim()).map(m=>({text:m[0],start:m.index,end:m.index+m[0].length}));
-    session={root,content,chunks,entries,lang:content.querySelector('[lang]')?.lang||content.lang||(/\p{Script=Hangul}/u.test(text)?'ko-KR':document.documentElement.lang||'en-US')};
+    const lang=content.querySelector('[lang]')?.lang||content.lang||(/\p{Script=Hangul}/u.test(text)?'ko-KR':document.documentElement.lang||'en-US');
+    let sentences;
+    try{sentences=[...new Intl.Segmenter(lang,{granularity:'sentence'}).segment(text)].map(s=>({start:s.index,end:s.index+s.segment.length}));}
+    catch{sentences=[...text.matchAll(/[^.!?。！？\n]+[.!?。！？]*[\s]*/g)].map(m=>({start:m.index,end:m.index+m[0].length}));}
+    const chunks=sentences.map(s=>{
+      const body=text.slice(s.start,s.end),start=s.start+(body.length-body.trimStart().length),end=s.end-(body.length-body.trimEnd().length);
+      return {start,end,sentenceStart:start,sentenceEnd:end};
+    }).filter(s=>s.end>s.start);
+    session={root,content,chunks,entries,text,lang};
     speakNext(token);
     document.querySelectorAll('[data-kavita-tts]').forEach(button=>button.setAttribute('aria-label','본문 읽어주기 · 재생 중'));
   }

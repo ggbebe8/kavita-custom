@@ -35,8 +35,8 @@ const {chromium}=require('playwright');const {readFileSync}=require('node:fs');c
  }
  assert.ok(await page.evaluate(()=>document.querySelector('.book-content').scrollLeft>0),'speech automatically follows into later screen pages');
  await page.evaluate(()=>lastUtterance.onboundary({charIndex:5,charLength:3}));await page.waitForTimeout(100);
- assert.equal(await page.evaluate(()=>[...CSS.highlights.get('kavita-tts-current')][0].toString().length),3,'word boundary highlights exact spoken text');
+ assert.equal(await page.evaluate(()=>[...CSS.highlights.get('kavita-tts-current')][0].toString().trim()),'자동 페이지와 하이라이트 테스트 문장입니다.','word boundaries keep only the current sentence highlighted');
  await page.evaluate(()=>{const content=document.querySelector('.book-content');content.scrollLeft=0;content.dispatchEvent(new Event('scroll',{bubbles:true}));});
  assert.equal(await page.evaluate(()=>CSS.highlights.has('kavita-tts-current')),false,'manual navigation clears speech highlight');
- assert.deepEqual(errors,[]);console.log('Browser TTS UI passed with mocked speech engine: voices/rate, text filtering, chunk sequencing, pause/resume, close, navigation/exit cancellation, automatic screen following, exact word highlight and cleanup. Real device audio was not tested.');
+ assert.deepEqual(errors,[]);console.log('Browser TTS UI passed with mocked speech engine: voices/rate, text filtering, chunk sequencing, pause/resume, close, navigation/exit cancellation, automatic screen following, current sentence highlight and cleanup. Real device audio was not tested.');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
