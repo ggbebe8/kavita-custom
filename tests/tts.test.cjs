@@ -59,5 +59,28 @@ const {chromium}=require('playwright');const {readFileSync}=require('node:fs');c
  assert.equal(await page.evaluate(()=>ttsCalls.filter(c=>typeof c==='object').length),wholeSentenceCalls,'screen follows without restarting speech');
  assert.equal(await page.evaluate(()=>ttsCalls.includes('pause')),false,'page transition never pauses the engine');
  await page.evaluate(()=>lastUtterance.onend());await page.waitForFunction(()=>!CSS.highlights.has('kavita-tts-current'));
- assert.deepEqual(errors,[]);console.log('Browser TTS UI passed with mocked speech engine: voices/rate, text filtering, chunk sequencing, pause/resume, close, navigation/exit cancellation, automatic screen following, current sentence highlight and cleanup. Real device audio was not tested.');
+ await page.goto('http://tts.test/');await page.addScriptTag({content:readFileSync('proxy/swipe.js','utf8')});
+ await page.route('**/api/book/1/book-info',route=>route.fulfill({json:{pages:3}}));
+ await page.route('**/api/book/1/book-page?*',route=>route.fulfill({contentType:'text/html; charset=utf-8',body:new URL(route.request().url()).searchParams.get('page')==='0'?'<p>첫 번째 장입니다.</p>':new URL(route.request().url()).searchParams.get('page')==='1'?'<div aria-hidden="true">이미지 구간</div>':'<p>두 번째 장을 이어 읽습니다.</p>'}));
+ await page.evaluate(async()=>{
+  const root=document.querySelector('app-book-reader'),content=root.querySelector('.book-content');
+  const reader=document.createElement('div');reader.className='reader-container';reader.style.width='400px';
+  const section=document.createElement('div');section.className='reading-section column-layout-1';root.append(reader);reader.append(section);section.append(content);
+  content.style.cssText='width:400px;height:200px;max-height:200px;column-count:1;column-gap:20px;overflow:hidden';
+  const bar=document.createElement('div');bar.className='bottom-bar';bar.innerHTML='<button><i class="next-page-highlight"></i></button>';root.append(bar);
+  window.sectionTurns=0;bar.querySelector('button').addEventListener('click',async()=>{
+   window.sectionTurns++;section.classList.add('is-loading');
+   const html=await fetch('/api/book/1/book-page?page='+window.sectionTurns).then(r=>r.text());
+   await new Promise(r=>setTimeout(r,100));content.innerHTML=html;content.scrollLeft=0;section.classList.remove('is-loading');
+  });
+  await fetch('/api/book/1/book-info').then(r=>r.json());content.innerHTML=await fetch('/api/book/1/book-page?page=0').then(r=>r.text());
+ });
+ await page.locator('[data-kavita-tts]').click();await page.getByRole('button',{name:'재생',exact:true}).click();
+ await page.waitForFunction(()=>lastUtterance?.text==='첫 번째 장입니다.');await page.evaluate(()=>lastUtterance.onend());
+ await page.waitForFunction(()=>lastUtterance?.text==='두 번째 장을 이어 읽습니다.');
+ assert.equal(await page.evaluate(()=>sectionTurns),2,'native sections advance exactly once each and empty sections are skipped');
+ assert.equal(await page.locator('dialog[open]').count(),0,'settings panel does not block automatic transition');
+ await page.evaluate(()=>lastUtterance.onend());await page.waitForFunction(()=>!CSS.highlights.has('kavita-tts-current'));
+ assert.equal(await page.evaluate(()=>sectionTurns),2,'book end does not wrap or open a different book');
+ assert.deepEqual(errors,[]);console.log('Browser TTS UI passed with mocked speech engine: voices/rate, text filtering, chunk sequencing, pause/resume, close, navigation/exit cancellation, automatic screen following, current sentence highlight, next-section continuation, empty-section skipping and book-end cleanup. Real device audio was not tested.');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
