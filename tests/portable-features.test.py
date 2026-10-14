@@ -26,6 +26,10 @@ with tempfile.TemporaryDirectory(prefix='kavita-portable-test-') as tmp:
     assert (target/'proxy/swipe.js').read_bytes()==(root/'proxy/swipe.js').read_bytes()
     assert json.loads((target/'proxy/pwa/manifest.webmanifest').read_text())['display']=='standalone'
     assert (target/'proxy/pwa/icon-512.png').read_bytes()==(root/'proxy/pwa/icon-512.png').read_bytes()
+    for name in ['app.js','store.js','sync.js','download.js','worker.js','bridge.js','index.html','offline.css','disable-worker.js']:
+        assert (target/'proxy/pwa/offline'/name).read_bytes()==(root/'proxy/pwa/offline'/name).read_bytes()
+    assert 'Service-Worker-Allowed' in (target/'proxy/default.conf').read_text()
+    assert (target/'OFFLINE.md').is_file()
     assert any(v['target']=='/usr/share/nginx/html/pwa' and v['read_only'] for v in rendered['services']['swipe-proxy']['volumes'])
     assert (books/'preserve.txt').read_text()=='book-data'
     assert (config/'preserve.txt').read_text()=='config-data'

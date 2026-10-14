@@ -52,7 +52,7 @@ def main():
                 for path in (root / folder).rglob('*'):
                     if path.is_file() and '__pycache__' not in path.parts:
                         add_bytes('project/' + str(path.relative_to(root)), path.read_bytes())
-            for name in ['README.swipe.md', 'REINSTALL.md']:
+            for name in ['README.swipe.md', 'REINSTALL.md', 'OFFLINE.md']:
                 add_bytes('project/' + name, (root / name).read_bytes())
             print('Packing config and books without stopping the service...', flush=True)
             for source, prefix in [(config, 'project/config'), (books, 'books')]:

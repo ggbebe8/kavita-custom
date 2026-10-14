@@ -363,6 +363,7 @@
   window.addEventListener('resize', cancelCalculation, {passive:true});
   let resume = null, navigationEpoch = 0;
   const resumePattern = /\[boolean\('kvscreen1:([0-9a-f-]+):([0-9.]+)'\)\]$/;
+  const offlineResumePattern=/\[boolean\('kvoffline1:([0-9]+)'\)\](?:\[boolean\('kvscreen1:[0-9a-f-]+:[0-9.]+'\)\])?$/;
   function layoutKey(g) {
     const css = getComputedStyle(g.content);
     return hash(JSON.stringify([innerWidth,innerHeight,g.size,g.content.clientHeight,g.content.className,
@@ -466,32 +467,65 @@
         node.dispatchEvent(new MouseEvent('click',replay));
     }).catch(()=>{});
   },true);
+  function semanticOffset(g,path){
+    try{
+      const wrapper=g.content.firstElementChild,element=document.evaluate(path.startsWith('//body')?'.'+path.slice(6):path,path.startsWith('//body')?wrapper:document,null,XPathResult.FIRST_ORDERED_NODE_TYPE,null).singleNodeValue;
+      if(!element||!g.content.contains(element))return null;
+      const view=g.content.getBoundingClientRect(),visible=rect=>rect.width>0&&rect.height>0&&rect.right>view.left+1&&rect.left<view.right-1&&rect.bottom>view.top&&rect.top<view.bottom;
+      const walker=document.createTreeWalker(element,NodeFilter.SHOW_TEXT);let offset=0;
+      while(walker.nextNode()){
+        const node=walker.currentNode;if(!node.textContent.trim()||node.parentElement.closest('style,script,button,[aria-hidden="true"]'))continue;
+        const range=document.createRange();range.selectNodeContents(node);
+        if([...range.getClientRects()].some(visible))for(let start=0;start<node.length;start+=64){
+          range.setStart(node,start);range.setEnd(node,Math.min(node.length,start+64));if(![...range.getClientRects()].some(visible))continue;
+          for(let index=start;index<Math.min(node.length,start+64);index++){range.setStart(node,index);range.setEnd(node,index+1);if(visible(range.getBoundingClientRect()))return offset+index;}
+        }
+        offset+=node.length;
+      }
+    }catch{}return null;
+  }
   function enrichProgress(body) {
     try {
       const data=JSON.parse(body),root=document.querySelector('app-book-reader');
       if (!book || String(data.chapterId)!==book.id || !sectionMatches(data.pageNum) || !root || root.querySelector('.is-loading') ||
           !root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2')) return body;
       const g=geometry(root);if(!g)return body;
-      if (resume && resume.id===book.id && resume.page===data.pageNum && resume.layout===layoutKey(g)) {
+      if (resume && resume.id===book.id && resume.page===data.pageNum && (resume.kind==='offline'||resume.layout===layoutKey(g))) {
         // Do not let initial native anchor restoration overwrite the exact saved screen.
         data.bookScrollId=resume.path;
       } else {
-        const path=typeof data.bookScrollId==='string'?data.bookScrollId.replace(resumePattern,''):'';
+        const path=typeof data.bookScrollId==='string'?data.bookScrollId.replace(resumePattern,'').replace(offlineResumePattern,''):'';
         if (!path || !(path.startsWith('//') || path.startsWith('id('))) return body;
         const offset=g.vertical?g.content.scrollTop:g.content.scrollLeft;
         const fraction=Math.max(0,offset/g.size).toFixed(6);
-        data.bookScrollId=path+`[boolean('kvscreen1:${layoutKey(g)}:${fraction}')]`;
+        const character=semanticOffset(g,path);
+        data.bookScrollId=path+(character===null?'':`[boolean('kvoffline1:${character}')]`)+`[boolean('kvscreen1:${layoutKey(g)}:${fraction}')]`;
       }
       return JSON.stringify(data);
     } catch {return body;}
   }
   function restoreScreen(root,g) {
     if (!resume || !book || resume.id!==book.id || !sectionMatches(resume.page)) return;
-    if (performance.now()-resume.time>10000 || resume.layout!==layoutKey(g)) {resume=null;return;}
+    if (performance.now()-resume.time>10000 || (resume.kind!=='offline'&&resume.layout!==layoutKey(g))) {resume=null;return;}
     if (document.fonts.status!=='loaded' || [...g.content.querySelectorAll('img')].some(img=>!img.complete)) return;
     if (!resume.ready) {resume.ready=performance.now();return;}
     if (performance.now()-resume.ready<450) return; // Native XPath/image restoration finishes first.
-    const target=resume.fraction*g.size;
+    let target=resume.fraction*g.size;
+    if(resume.kind==='offline'){
+      try{
+        const path=resume.path.replace(offlineResumePattern,''),wrapper=g.content.firstElementChild;
+        const element=document.evaluate(path.startsWith('//body')?'.'+path.slice(6):path,path.startsWith('//body')?wrapper:document,null,XPathResult.FIRST_ORDERED_NODE_TYPE,null).singleNodeValue;
+        if(!element){resume=null;return;}
+        const walker=document.createTreeWalker(element,NodeFilter.SHOW_TEXT);let offset=resume.offset,rect;
+        while(walker.nextNode()){
+          const node=walker.currentNode;if(!node.textContent.trim()||node.parentElement.closest('style,script,button,[aria-hidden="true"]'))continue;
+          if(offset<node.length){const range=document.createRange();range.setStart(node,offset);range.setEnd(node,offset+1);rect=range.getClientRects()[0];break;}offset-=node.length;
+        }
+        rect=rect||element.getBoundingClientRect();const view=g.content.getBoundingClientRect();
+        const absolute=g.vertical?g.content.scrollTop+rect.top-view.top:g.content.scrollLeft+rect.left-view.left;
+        target=Math.max(0,Math.floor((absolute+2)/g.size)*g.size);
+      }catch{resume=null;return;}
+    }
     resume=null;
     g.content.scrollTo(g.vertical?{top:target,behavior:'instant'}:{left:target,behavior:'instant'});
     // Notify Kavita's existing scroll/progress handler; no additional POSTs are created.
@@ -696,7 +730,8 @@
           readingSnapshots.set(info.id,{position:data,headers:new Headers(headers),checked:-Infinity});
         if(info.epoch!==navigationEpoch)return;
         const match=typeof data.bookScrollId==='string'&&data.bookScrollId.match(resumePattern);
-        resume=match&&Number.isFinite(Number(match[2]))?{id:info.id,page:data.pageNum,layout:match[1],fraction:Number(match[2]),path:data.bookScrollId,time:performance.now()}:null;
+        const offline=typeof data.bookScrollId==='string'&&data.bookScrollId.match(offlineResumePattern);
+        resume=offline?{id:info.id,page:data.pageNum,kind:'offline',offset:Number(offline[1]),path:data.bookScrollId,time:performance.now()}:match&&Number.isFinite(Number(match[2]))?{id:info.id,page:data.pageNum,layout:match[1],fraction:Number(match[2]),path:data.bookScrollId,time:performance.now()}:null;
       } catch {resume=null;} return;
     }
     if (info.type === 'chapter') { try { recordRevision(info.id, text); } catch {} return; }
@@ -1223,4 +1258,12 @@
     if(!scheduled){scheduled=true;requestAnimationFrame(()=>{scheduled=false;refresh();});}
   }).observe(document.body,{childList:true,subtree:true});
   refresh();
+})();
+
+// Optional offline EPUB bookshelf. Public UI caching is separate from the
+// native reader; authenticated responses are stored only for explicit books.
+(() => {
+  if(!window.isSecureContext||!('serviceWorker' in navigator)||window.__kavitaOfflineBridgeInstalled)return;
+  window.__kavitaOfflineBridgeInstalled=true;
+  import('/kavita-pwa/offline/bridge.js').catch(()=>{window.__kavitaOfflineBridgeInstalled=false;});
 })();

@@ -8,7 +8,7 @@ const script=readFileSync('proxy/swipe.js','utf8');
   const page=await browser.newPage({viewport:{width:800,height:600}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   let progress={pageNum:0,bookScrollId:'//body/p[1]'},writes=0,progressDelay=0;
-  const text='<p>'+('A long paragraph spanning multiple screen pages. '.repeat(1200))+'</p>';
+  const text='<div><p>'+('A long paragraph spanning multiple screen pages. '.repeat(1200))+'</p></div>';
   await page.route('http://position.test/**',async route=>{
    const u=new URL(route.request().url());
    if(u.pathname==='/api/reader/progress'){progress=JSON.parse(route.request().postData());writes++;return route.fulfill({status:200,body:''});}
@@ -39,6 +39,14 @@ const script=readFileSync('proxy/swipe.js','utf8');
   await page.evaluate(()=>{document.querySelector('.book-content').scrollLeft=4*820;});
   await page.evaluate(()=>fetch('/api/reader/progress',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chapterId:1,pageNum:0,bookScrollId:'//body/p[1]'})}));
   assert.match(progress.bookScrollId,/:4\.000000'\)\]$/);
+  // Offline sync uses a semantic character offset, independent of viewport
+  // dimensions. Native initial saves must retain it until exact restoration.
+  progress={chapterId:1,pageNum:0,bookScrollId:"//body/p[1][boolean('kvoffline1:6000')]"};
+  await start();await save();assert.equal(progress.bookScrollId,"//body/p[1][boolean('kvoffline1:6000')]");
+  await page.waitForFunction(()=>{
+    const content=document.querySelector('.book-content'),text=content.querySelector('p').firstChild,range=document.createRange();range.setStart(text,6000);range.setEnd(text,6001);
+    const rect=range.getBoundingClientRect(),view=content.getBoundingClientRect();return content.scrollLeft>0&&rect.left>=view.left-2&&rect.left<view.right;
+  });
   // A late initial-progress response must not undo an explicit chapter jump.
   progress={...progress,pageNum:1};progressDelay=300;
   await page.goto('http://position.test/reader');await page.addScriptTag({content:script});

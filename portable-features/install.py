@@ -59,6 +59,8 @@ def main():
         config.mkdir(mode=0o700)
     shutil.copytree(kit / 'proxy', target / 'proxy')
     shutil.copy2(kit / 'README.md', target / 'README.md')
+    if (kit / 'OFFLINE.md').is_file():
+        shutil.copy2(kit / 'OFFLINE.md', target / 'OFFLINE.md')
     (target / 'compose.yaml').write_text(json.dumps({'services': {'kavita': kavita, 'swipe-proxy': proxy}}, indent=2) + '\n')
     (target / 'compose.original.yaml').write_text(json.dumps({'services': {'kavita': original}}, indent=2) + '\n')
     print('Feature configuration created:', target)
