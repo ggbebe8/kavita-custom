@@ -1063,25 +1063,11 @@
     const chunk=session.chunks.shift();
     while(chunk.start<chunk.end&&/\s/.test(session.text[chunk.start]))chunk.start++;
     if(chunk.start>=chunk.end){void speakNext(id);return;}
-    // Never rely on boundary events to cross a screen. Some Android voices
-    // provide none. Split each sentence at its actual rendered page boundary.
-    const pageAt=offset=>{
-      const range=textRange(offset,offset+1),rect=range?.getClientRects()[0];if(!rect)return 0;
-      const content=session.content,view=content.getBoundingClientRect(),css=getComputedStyle(content);
-      const vertical=content.classList.contains('writing-style-vertical');
-      const column=session.root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2');
-      const size=column?(vertical?parseFloat(content.style.maxHeight)-20:(session.root.querySelector('.reader-container')?.offsetWidth||content.clientWidth)-2*(parseFloat(css.marginLeft)||0)+20):content.clientHeight;
-      return size>0?Math.floor(((vertical||!column?content.scrollTop+rect.top-view.top:content.scrollLeft+rect.left-view.left)+2)/size):0;
-    };
-    let end=Math.min(chunk.end,chunk.start+220);
-    const startPage=pageAt(chunk.start);
-    if(pageAt(end-1)>startPage){
-      let lo=chunk.start+1,hi=end;
-      while(lo<hi){const mid=Math.floor((lo+hi)/2);if(pageAt(mid)>startPage)hi=mid;else lo=mid+1;}
-      end=lo;
-    }
-    if(end<chunk.end)session.chunks.unshift({...chunk,start:end});
-    const text=session.text.slice(chunk.start,end);
+    // A page boundary is a visual boundary, not a speech boundary. Keep the
+    // entire sentence in one utterance so words crossing columns stay intact.
+    // Engines with boundary events follow the actual spoken position; other
+    // engines follow at the next sentence without interrupting pronunciation.
+    const text=session.text.slice(chunk.start,chunk.end);
     const sentenceRange=textRange(chunk.sentenceStart,chunk.sentenceEnd);
     if(!await follow(textRange(chunk.start,chunk.start+1),id,sentenceRange)||id!==token||!session)return;
     const item=new SpeechSynthesisUtterance(text);utterance=item;
