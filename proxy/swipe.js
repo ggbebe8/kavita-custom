@@ -987,3 +987,116 @@
   }
   window.setInterval(update,300);update();
 })();
+
+// Device/browser speech synthesis. No Kavita-side TTS server or audio cache.
+(() => {
+  'use strict';
+  if(window.__kavitaTtsInstalled)return;
+  window.__kavitaTtsInstalled=true;
+  const synth=window.speechSynthesis;
+  if(!synth||typeof window.SpeechSynthesisUtterance!=='function')return;
+  let session=null,token=0,utterance=null,panel=null,status=null,voiceSelect=null,rateInput=null;
+  const pref='kavita-browser-tts-v1';
+  let settings={rate:1,voice:''};
+  try{const saved=JSON.parse(localStorage.getItem(pref));if(saved&&saved.rate>=.5&&saved.rate<=2)settings={rate:Number(saved.rate),voice:String(saved.voice||'')};}catch{}
+  const announce=text=>{if(status)status.textContent=text;};
+  function stop(message='읽기를 정지했습니다.') {
+    token++;session=null;utterance=null;synth.cancel();announce(message);
+    document.querySelectorAll('[data-kavita-tts]').forEach(button=>button.setAttribute('aria-label','본문 읽어주기'));
+  }
+  function voices() {
+    if(!voiceSelect)return;
+    voiceSelect.replaceChildren(new Option('자동 선택',''));
+    for(const voice of synth.getVoices())voiceSelect.add(new Option(`${voice.name} (${voice.lang})${voice.localService?' · 기기 음성':''}`,voice.voiceURI));
+    voiceSelect.value=settings.voice;
+    if(voiceSelect.selectedIndex<0)voiceSelect.value='';
+  }
+  function speakNext(id) {
+    if(id!==token||!session)return;
+    if(!session.root.isConnected||session.content!==session.root.querySelector('.book-content')){stop();return;}
+    if(!session.chunks.length){stop('현재 장의 읽기가 끝났습니다. 다음 장에서 다시 재생하세요.');return;}
+    const item=new SpeechSynthesisUtterance(session.chunks.shift());utterance=item;
+    const available=synth.getVoices();
+    item.voice=available.find(v=>v.voiceURI===settings.voice)||available.find(v=>v.lang.toLowerCase().startsWith(session.lang.toLowerCase()))||null;
+    item.lang=item.voice?.lang||session.lang;item.rate=settings.rate;
+    item.onend=()=>{if(id===token){utterance=null;speakNext(id);}};
+    item.onerror=event=>{if(id===token)stop(`음성 재생 실패 (${event.error||'알 수 없는 오류'}). 음성 설정을 확인하세요.`);};
+    announce('읽는 중 · 현재 장 끝에서 종료됩니다.');
+    synth.speak(item);
+  }
+  function readingText(content) {
+    const nodes=[],walker=document.createTreeWalker(content,NodeFilter.SHOW_TEXT);
+    while(walker.nextNode()) {
+      const node=walker.currentNode;
+      if(!node.textContent.trim()||node.parentElement.closest('script,style,noscript,button,input,textarea,select,[aria-hidden="true"],.bookmark-overlay,app-book-line-overlay'))continue;
+      const css=getComputedStyle(node.parentElement);if(css.display==='none'||css.visibility==='hidden')continue;
+      nodes.push(node);
+    }
+    const viewport=content.getBoundingClientRect();
+    const visible=rect=>rect.width>0&&rect.height>0&&rect.right>viewport.left+1&&rect.left<viewport.right-1&&rect.bottom>viewport.top+1&&rect.top<viewport.bottom-1;
+    let first=0,offset=0,found=false;
+    // Long paragraphs can span many columns: locate a visible character rather
+    // than reading the entire paragraph from its beginning on every restart.
+    for(let n=0;n<nodes.length&&!found;n++) {
+      const node=nodes[n],range=document.createRange();range.selectNodeContents(node);
+      if(![...range.getClientRects()].some(visible))continue;
+      for(let k=0;k<node.length;k+=64){
+        range.setStart(node,k);range.setEnd(node,Math.min(k+64,node.length));
+        if(![...range.getClientRects()].some(visible))continue;
+        for(let j=k;j<Math.min(k+64,node.length);j++){
+          range.setStart(node,j);range.setEnd(node,j+1);
+          if(visible(range.getBoundingClientRect())){first=n;offset=j;found=true;break;}
+        }
+        if(found)break;
+      }
+    }
+    return nodes.slice(first).map((node,index)=>index===0?node.textContent.slice(offset):node.textContent).join(' ').replace(/\s+/g,' ').trim();
+  }
+  function start(root) {
+    const content=root.querySelector('.book-content');
+    if(!content||root.querySelector('.is-loading')){announce('본문을 불러온 후 다시 재생하세요.');return;}
+    const text=readingText(content);if(!text){announce('읽을 수 있는 본문 텍스트가 없습니다.');return;}
+    stop();
+    const chunks=text.match(/.{1,220}(?:\s|$)|.{1,220}/g)||[text];
+    session={root,content,chunks,lang:content.querySelector('[lang]')?.lang||content.lang||(/\p{Script=Hangul}/u.test(text)?'ko-KR':document.documentElement.lang||'en-US')};
+    speakNext(token);
+    document.querySelectorAll('[data-kavita-tts]').forEach(button=>button.setAttribute('aria-label','본문 읽어주기 · 재생 중'));
+  }
+  function openPanel(root) {
+    if(panel?.isConnected){panel.close();panel.remove();}
+    panel=document.createElement('dialog');panel.id='kavita-tts-panel';panel.setAttribute('role','dialog');
+    panel.style.cssText='max-width:min(430px,90vw);border:0;border-radius:12px;padding:20px;color:#222;background:#fff;box-shadow:0 8px 40px #0008';
+    const title=document.createElement('h3');title.textContent='본문 읽어주기';panel.append(title);
+    const explanation=document.createElement('p');explanation.textContent='현재 화면의 본문부터 현재 장 끝까지 읽습니다. 화면을 끄면 중단될 수 있으며, 선택한 음성에 따라 인터넷 연결이 필요할 수 있습니다.';panel.append(explanation);
+    voiceSelect=document.createElement('select');voiceSelect.setAttribute('aria-label','읽기 음성');panel.append(voiceSelect);voices();
+    rateInput=document.createElement('input');rateInput.type='range';rateInput.min='.5';rateInput.max='2';rateInput.step='.1';rateInput.value=settings.rate;rateInput.setAttribute('aria-label','읽기 속도');
+    const rateLabel=document.createElement('label');rateLabel.textContent=`속도 ${settings.rate}배 `;rateLabel.append(rateInput);panel.append(rateLabel);
+    const save=()=>{settings={rate:Number(rateInput.value),voice:voiceSelect.value};rateLabel.firstChild.textContent=`속도 ${settings.rate}배 `;try{localStorage.setItem(pref,JSON.stringify(settings));}catch{}};
+    rateInput.addEventListener('input',save);voiceSelect.addEventListener('change',save);
+    status=document.createElement('p');status.setAttribute('aria-live','polite');status.textContent=session?(synth.paused?'일시정지 중':'읽는 중'):'음성·속도 변경은 다음 읽기 구간부터 적용됩니다.';panel.append(status);
+    for(const [label,action] of [['재생',()=>{if(session){synth.resume();announce('읽는 중');}else start(root);}],['일시정지',()=>{if(session){synth.pause();announce('일시정지 중');}}],['정지',()=>stop()],['닫기',()=>panel.close()]]){
+      const button=document.createElement('button');button.type='button';button.textContent=label;button.style.cssText='margin:6px;padding:8px';button.addEventListener('click',action);panel.append(button);
+    }
+    (document.fullscreenElement||document.body).append(panel);panel.showModal();
+  }
+  function refresh() {
+    if(session&&(!session.root.isConnected||session.content!==session.root.querySelector('.book-content')||session.root.querySelector('.is-loading')))stop();
+    for(const shortcut of document.querySelectorAll('app-book-reader .reader-header .fa-clipboard-question')){
+      const anchor=shortcut.closest('button'),root=shortcut.closest('app-book-reader');
+      if(!anchor?.parentElement||anchor.parentElement.querySelector('[data-kavita-tts]'))continue;
+      const button=document.createElement('button');button.type='button';button.className='btn btn-icon me-1';button.setAttribute('data-kavita-tts','');button.setAttribute('aria-label','본문 읽어주기');button.title='본문 읽어주기';
+      const icon=document.createElement('i');icon.className='fa-solid fa-volume-high';icon.setAttribute('aria-hidden','true');button.append(icon);
+      button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openPanel(root);});anchor.parentElement.insertBefore(button,anchor.parentElement.querySelector('[data-kavita-fullscreen]')||anchor);
+    }
+  }
+  document.addEventListener('kavita-page-navigation',()=>{if(session)stop('페이지를 이동하여 읽기를 정지했습니다.');});
+  document.addEventListener('scroll',event=>{if(session&&event.target===session.content)stop('페이지를 이동하여 읽기를 정지했습니다.');},true);
+  window.addEventListener('pagehide',()=>stop());
+  synth.addEventListener('voiceschanged',voices);
+  let scheduled=false;
+  new MutationObserver(records=>{
+    if(session&&records.some(r=>session.content.contains(r.target)))stop('본문이 변경되어 읽기를 정지했습니다.');
+    if(!scheduled){scheduled=true;requestAnimationFrame(()=>{scheduled=false;refresh();});}
+  }).observe(document.body,{childList:true,subtree:true});
+  refresh();
+})();
