@@ -1025,13 +1025,12 @@
     } else if(rect.top<view.top||rect.top>=view.bottom)top=Math.max(0,top+rect.top-view.top);
     if(Math.abs(left-content.scrollLeft)>1||Math.abs(top-content.scrollTop)>1){
       if(following)return true;following=true;
-      const paused=synth.paused;synth.pause();
       try {
         if(window.__kavitaBeforeNavigation&&!await window.__kavitaBeforeNavigation())return false;
         if(id!==token||session!==owner)return false;
         expectedScroll={content,left,top};content.scrollTo({left,top,behavior:'instant'});
         content.dispatchEvent(new Event('scroll',{bubbles:true}));
-      }finally{following=false;if(id===token&&!paused)synth.resume();}
+      }finally{following=false;}
     }
     if(id!==token||session!==owner)return false;
     clearHighlight();
@@ -1094,7 +1093,7 @@
     const available=synth.getVoices();
     item.voice=available.find(v=>v.voiceURI===settings.voice)||available.find(v=>v.lang.toLowerCase().startsWith(session.lang.toLowerCase()))||null;
     item.lang=item.voice?.lang||session.lang;item.rate=settings.rate;
-    item.onend=()=>{if(id===token){utterance=null;speakNext(id);}};
+    item.onend=()=>{if(id===token){utterance=null;setTimeout(()=>{if(id===token)void speakNext(id);},0);}};
     item.onerror=event=>{if(id===token)stop(`음성 재생 실패 (${event.error||'알 수 없는 오류'}). 음성 설정을 확인하세요.`);};
     announce('읽는 중 · 현재 장 끝에서 종료됩니다.');
     synth.speak(item);

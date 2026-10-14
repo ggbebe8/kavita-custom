@@ -14,7 +14,7 @@ const {chromium}=require('playwright');const {readFileSync}=require('node:fs');c
  let calls=await page.evaluate(()=>ttsCalls.filter(c=>typeof c==='object'));assert.equal(calls.length,1);assert.equal(calls[0].rate,1.4);assert.equal(calls[0].lang,'ko-KR');assert.ok(!calls[0].text.includes('읽으면 안 되는 버튼'));
  await page.getByRole('button',{name:'일시정지',exact:true}).click();assert.equal(await page.evaluate(()=>speechSynthesis.paused),true);
  await page.getByRole('button',{name:'재생',exact:true}).click();assert.equal(await page.evaluate(()=>speechSynthesis.paused),false);
- await page.evaluate(()=>lastUtterance.onend());assert.equal(await page.evaluate(()=>ttsCalls.filter(c=>typeof c==='object').length),2,'chunks continue sequentially');
+ await page.evaluate(()=>lastUtterance.onend());await page.waitForFunction(()=>ttsCalls.filter(c=>typeof c==='object').length===2);
  await page.getByRole('button',{name:'닫기',exact:true}).click();assert.equal(await page.locator('dialog[open]').count(),0,'panel closes without stopping audio');
  await page.evaluate(()=>document.dispatchEvent(new Event('kavita-page-navigation')));assert.equal(await page.evaluate(()=>ttsCalls.at(-1)),'cancel');
  await page.locator('[data-kavita-tts]').click();assert.equal(await page.getByRole('slider').inputValue(),'1.4');await page.getByRole('button',{name:'재생',exact:true}).click();
@@ -29,11 +29,15 @@ const {chromium}=require('playwright');const {readFileSync}=require('node:fs');c
  });
  await page.locator('[data-kavita-tts]').click();await page.getByRole('button',{name:'재생',exact:true}).click();await page.getByRole('button',{name:'닫기',exact:true}).click();
  await page.waitForFunction(()=>!!CSS.highlights.get('kavita-tts-current'));
+ const pausesBefore=await page.evaluate(()=>ttsCalls.filter(c=>c==='pause').length);
  for(let i=0;i<15&&(await page.evaluate(()=>document.querySelector('.book-content').scrollLeft))===0;i++){
   const previous=await page.evaluate(()=>ttsCalls.filter(c=>typeof c==='object').length);
   await page.evaluate(()=>lastUtterance.onend());await page.waitForFunction(n=>ttsCalls.filter(c=>typeof c==='object').length>n,previous);
  }
  assert.ok(await page.evaluate(()=>document.querySelector('.book-content').scrollLeft>0),'speech automatically follows into later screen pages');
+ assert.equal(await page.evaluate(()=>ttsCalls.filter(c=>c==='pause').length),pausesBefore,'automatic page following must never pause the speech engine');
+ const continued=await page.evaluate(()=>ttsCalls.filter(c=>typeof c==='object').length);
+ await page.evaluate(()=>lastUtterance.onend());await page.waitForFunction(n=>ttsCalls.filter(c=>typeof c==='object').length>n,continued);
  await page.evaluate(()=>lastUtterance.onboundary({charIndex:5,charLength:3}));await page.waitForTimeout(100);
  assert.equal(await page.evaluate(()=>[...CSS.highlights.get('kavita-tts-current')][0].toString().trim()),'자동 페이지와 하이라이트 테스트 문장입니다.','word boundaries keep only the current sentence highlighted');
  await page.evaluate(()=>{const content=document.querySelector('.book-content');content.scrollLeft=0;content.dispatchEvent(new Event('scroll',{bubbles:true}));});
