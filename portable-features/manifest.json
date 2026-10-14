@@ -1,7 +1,7 @@
 {
   "install.py": "471db8988e74752c9701e9ae8975223a61a9ff7d9f4b1bc47d1c6ed9ba51dd28",
   "README.md": "ead8629cd734e55a3a6114fd4c55baa92f62db3b8b3b0c43f9c1db49e5bdef96",
-  "OFFLINE.md": "743ca2f2fe61c141bd96e0cff0fe6f9df5a6e60bada351f8dde86457e39e9cf1",
+  "OFFLINE.md": "5d74f5c5f1e738e22bba6bf4de38bb9818592b6c07863cc0d79e8d5f68133ab7",
   "images.json": "1ce0765259f71b20473d75cf220a741ab7a27823614345b170cb71ecd58e39bf",
   "proxy/swipe.js": "7c8f53baf0e6f925934ae69ea8a0f38c395320999d9be7d8747a46819f79d2cf",
   "proxy/default.conf": "dc3718d1a1d94de6ff82e0b15bc5bbe7c45e8177bccf0c64f1cebd6eb1a92262",
@@ -13,12 +13,12 @@
   "proxy/pwa/logo.svg": "26205b7315e844a0fdfed83395b0b9ff0ff1138fb892c5527b5ab236c40e58af",
   "proxy/pwa/manifest.webmanifest": "66d6b35294f8af823f773799ea7bd1a33b520f121973add83f9624730e4a571a",
   "proxy/pwa/offline/app.js": "e63db2e7219f5ca31393dbba2da5e18ccb4d0346028ecc9b1f764c7a83f229f2",
-  "proxy/pwa/offline/bridge.js": "95194f31c269e97bb4e35ed34df9307ecd1832faa82cc7cf06ae8676b6ef9c0d",
+  "proxy/pwa/offline/bridge.js": "87d0831fc07f881f6bb5ab86822a9947a390bfc4978a697f764ffed8b9101235",
   "proxy/pwa/offline/disable-worker.js": "f09452f7ea83cb0f55e4e0255299570bbb357062e07865280970560060b619c1",
   "proxy/pwa/offline/download.js": "dc696e2e40c23ec602136ececc8f36548ff5de93102c7001e0068807a05e71c0",
-  "proxy/pwa/offline/index.html": "bccd95860ff7ca91b0c399af0c9f6d8f09d5b9696827b1a5800eab1e6173bee8",
+  "proxy/pwa/offline/index.html": "7971e7f34173c0250c61ce09b59b01068a4325548e29d9e5f5ae63f3c8f6398c",
   "proxy/pwa/offline/offline.css": "77681fb105ea039cb90b34e947f4aa838d56a4b0eb7b6d47d2a454fcd4c2c5d3",
   "proxy/pwa/offline/store.js": "38570389f83bc861e3a98de91896ffe0909b6e722ceced707a09c8c109935454",
   "proxy/pwa/offline/sync.js": "6e95e1d0efe86f62e4b9a789b66fd39c28357ab3640bc8b5fb5562dafed67c91",
-  "proxy/pwa/offline/worker.js": "97de3002a09964967fcc6ca85f392aa83e0db6aa09838e425d889a9b4680c36a"
+  "proxy/pwa/offline/worker.js": "520d90d1f376ae77f4e40b4351e3f19b3a8a93a259c84dde3dccc41aa5d04216"
 }

@@ -1,6 +1,6 @@
 /* Only the public offline UI is cached here. Books/notes live in account-scoped
    IndexedDB; authenticated API traffic is never put in a shared HTTP cache. */
-const VERSION='kavita-offline-shell-f527075b28f1597e';
+const VERSION='kavita-offline-shell-3486538273ede2f8';
 const ROOT='/kavita-pwa/offline/';
 const FILES=['index.html','offline.css','app.js','store.js','download.js','sync.js','bridge.js'].map(name=>ROOT+name);
 self.addEventListener('install',event=>event.waitUntil((async()=>{
