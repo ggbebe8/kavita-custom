@@ -79,7 +79,7 @@ async function until(check){const deadline=Date.now()+15000;while(!await check()
   await until(async()=>page.evaluate(async()=>{const s=await import('/kavita-pwa/offline/store.js');const current=await s.get('states','101:1');return !!current&&!current.dirty&&Object.keys(current.drafts).length===0;}));
   assert.equal(writes.filter(w=>w.type==='progress').length,1);assert.equal(annotations.length,1);assert.equal(annotations[0].selectedText,selected);assert.ok(annotations[0].comment.includes('kavitaOfflineId'));
   // Core retry/conflict tests run without app background timers or automatic sync.
-  const core=await context.newPage();await core.goto(origin+'/');await core.evaluate(async()=>{window.store=await import('/kavita-pwa/offline/store.js');window.syncer=await import('/kavita-pwa/offline/sync.js');});
+  const core=await context.newPage();await core.goto(origin+'/');await core.evaluate(async()=>{window.__kavitaPageIndicatorInstalled=true;window.__kavitaOfflineFetch=window.fetch.bind(window);window.readerHookCalls=0;window.fetch=async()=>{window.readerHookCalls++;throw new Error('Background sync must bypass native reader hooks');};window.store=await import('/kavita-pwa/offline/store.js');window.syncer=await import('/kavita-pwa/offline/sync.js');});
   await page.close();
   await core.evaluate(async()=>{const key='101:1';await store.change(key,s=>({...s,drafts:{newnote:{op:'create',rev:1,base:null,local:{...s.annotations[0],id:0,selectedText:'추가 메모',comment:store.noteDocument('중복 방지','newnote'),commentHtml:'<p>중복 방지</p>',commentPlainText:'중복 방지'}}}}));});
   lostCreate=true;await core.evaluate(()=>syncer.syncAll({status:()=>{}}));assert.equal(annotations.length,2);
@@ -113,6 +113,8 @@ async function until(check){const deadline=Date.now()+15000;while(!await check()
   await core.evaluate(async()=>{await store.change('101:1',s=>({...s,drafts:{parallel:{op:'create',rev:1,base:null,local:{...s.annotations[0],id:0,selectedText:'병렬 메모',comment:store.noteDocument('한 번만','parallel'),commentHtml:'<p>한 번만</p>'}}}}));});
   const other=await context.newPage();await other.goto(origin+'/');await other.evaluate(async()=>{window.syncer=await import('/kavita-pwa/offline/sync.js');});
   await Promise.all([core.evaluate(()=>syncer.syncAll()),other.evaluate(()=>syncer.syncAll())]);assert.equal(annotations.filter(a=>a.selectedText==='병렬 메모').length,1);
+  assert.equal(await core.evaluate(()=>readerHookCalls),0,'background API requests bypass native reader progress and resume hooks');
+  assert.equal(await core.evaluate(async()=>{const transport=window.__kavitaOfflineFetch;delete window.__kavitaOfflineFetch;try{await store.json('/api/reader/get-progress?chapterId=1');return false;}catch(error){return error.message.includes('새로고침');}finally{window.__kavitaOfflineFetch=transport;}}),true,'old native tabs must retain drafts and request refresh rather than rewrite a sync payload');
   // Authentication failure and changed editions retain all local progress.
   await core.evaluate(()=>store.change('101:1',s=>({...s,progress:{...s.progress,pageNum:2},dirty:true,revision:s.revision+1})));
   deny=true;await core.evaluate(()=>syncer.syncAll());assert.equal(await core.evaluate(async()=>(await store.get('states','101:1')).dirty),true);deny=false;

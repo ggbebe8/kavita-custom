@@ -51,10 +51,12 @@ export function revision(chapter){return JSON.stringify((chapter.files||[]).map(
 export async function api(path,{method='GET',body,account,signal}={}){
   const user=identity();if(!user||account&&user.key!==account)throw new Error('계정이 바뀌었습니다. 해당 계정으로 로그인한 후 다시 시도하세요.');
   if(!user.token)throw new Error('온라인 로그인이 필요합니다. 기기의 변경은 보관됩니다.');
+  const transport=window.__kavitaOfflineFetch||(!window.__kavitaPageIndicatorInstalled?window.fetch.bind(window):null);
+  if(!transport)throw new Error('온라인 리더를 새로고침한 뒤 동기화하세요. 기기의 변경은 보관됩니다.');
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
   const cancel=()=>controller.abort();signal?.addEventListener('abort',cancel,{once:true});if(signal?.aborted)cancel();
   try{
-    const response=await fetch(path,{method,body:body===undefined?undefined:JSON.stringify(body),headers:{Authorization:`Bearer ${user.token}`,...(body===undefined?{}:{'Content-Type':'application/json'})},credentials:'same-origin',cache:'no-store',signal:controller.signal});
+    const response=await transport(path,{method,body:body===undefined?undefined:JSON.stringify(body),headers:{Authorization:`Bearer ${user.token}`,...(body===undefined?{}:{'Content-Type':'application/json'})},credentials:'same-origin',cache:'no-store',signal:controller.signal});
     if(response.status===401||response.status===403)throw new Error('온라인 로그인 또는 권한 확인이 필요합니다. 미동기화 변경은 기기에 보관됩니다.');
     if(!response.ok){const error=new Error(`서버 요청 실패 (${response.status}). 변경은 기기에 보관됩니다.`);error.status=response.status;throw error;}
     if(identity()?.key!==user.key)throw new Error('요청 중 계정이 바뀌어 처리를 중단했습니다.');
