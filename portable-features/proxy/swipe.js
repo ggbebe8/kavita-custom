@@ -399,7 +399,8 @@
         button.addEventListener('click',()=>finish(value));dialog.append(button);
       }
       dialog.addEventListener('cancel',event=>{event.preventDefault();finish('cancel');});
-      document.body.append(dialog);dialog.showModal();
+      dialog.setAttribute('role','dialog');
+      (document.fullscreenElement||document.body).append(dialog);dialog.showModal();
     });
   }
   async function checkReadingPosition(id, headers, cancelled=()=>false) {
@@ -442,6 +443,26 @@
     if(!state||performance.now()-state.checked<250)return true;
     return checkReadingPosition(book.id,book.headers);
   });
+  // Native tap overlays and arrow buttons bypass the custom turn queue.
+  // Check them before Angular changes the visible page, not only on its
+  // eventual (sometimes debounced) progress POST.
+  document.addEventListener('click',event=>{
+    if(!event.isTrusted || event.defaultPrevented)return;
+    const target=event.target instanceof Element?event.target:null;
+    const root=target?.closest('app-book-reader');
+    if(!root||!book||!readingSnapshots.has(book.id))return;
+    const overlay=target.closest('.tap-to-paginate > .left,.tap-to-paginate > .right,.tap-to-paginate > .right-with-scrollbar');
+    const button=target.closest('.bottom-bar button');
+    const arrow=button?.querySelector('.fa-angle-left,.fa-angle-right,.fa-angle-double-left,.fa-angle-double-right');
+    if(!overlay&&!arrow)return;
+    event.preventDefault();event.stopImmediatePropagation();
+    const owner=book,url=location.href,node=overlay||button;
+    const replay={bubbles:true,cancelable:true,clientX:event.clientX,clientY:event.clientY,detail:event.detail};
+    void window.__kavitaBeforeNavigation().then(allowed=>{
+      if(allowed&&book===owner&&location.href===url&&node.isConnected&&!node.disabled)
+        node.dispatchEvent(new MouseEvent('click',replay));
+    }).catch(()=>{});
+  },true);
   function enrichProgress(body) {
     try {
       const data=JSON.parse(body),root=document.querySelector('app-book-reader');
@@ -721,11 +742,21 @@
         });return;
       }
     }
-    if (r?.info) this.addEventListener('load', () => {
-      if (this.status === 200) {
-        try { observe(r.info, this.responseType === 'json' ? JSON.stringify(this.response) : this.responseText, r.headers); } catch {}
-      }
-    }, {once:true});
+    if (r?.info) {
+      let observed=false;
+      const observeResponse=()=>{
+        if(observed||this.readyState!==4||this.status!==200)return;
+        try {
+          observe(r.info,this.responseType==='json'?JSON.stringify(this.response):this.responseText,r.headers);
+          observed=true;
+        } catch {}
+      };
+      // XHR EventTarget does not prioritize capture listeners over an earlier
+      // onload handler. DONE precedes load, so install the baseline here.
+      this.addEventListener('readystatechange',observeResponse);
+      this.addEventListener('load',observeResponse,{once:true});
+      this.addEventListener('loadend',()=>this.removeEventListener('readystatechange',observeResponse),{once:true});
+    }
     return send.apply(this,args);
   };
   window.fetch = async function(input, init) {
@@ -753,7 +784,7 @@
     if (info && response.ok) {
       const all = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
       const headers = new Headers(); if (all.has('authorization')) headers.set('authorization',all.get('authorization'));
-      void response.clone().text().then(text => observe(info,text,headers)).catch(() => {});
+      try {observe(info,await response.clone().text(),headers);} catch {}
     }
     return response;
   };
