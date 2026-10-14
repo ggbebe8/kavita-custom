@@ -53,6 +53,7 @@
     return true;
   }
   async function turnPage(root, direction) {
+    if (window.__kavitaBeforeNavigation && !await window.__kavitaBeforeNavigation()) return;
     turning = true;
     const restore = hiddenMenu(root);
     const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
@@ -139,6 +140,7 @@
   const tapPreferences = new Map();
   const tapInteractive = interactive + ',.bookmark-overlay,app-epub-highlight,[kavita-part],[onclick]';
   const pendingTurns = [];
+  document.addEventListener('kavita-reading-conflict',()=>{pendingTurns.length=0;gesture=null;tap=null;});
   let drainingTurns = false;
   let tap = null, settingsScheduled = false;
   const sideTap = x => x < innerWidth * .2 || x > innerWidth * .8;
@@ -369,6 +371,77 @@
   function progressURL(url) {
     try { const u=new URL(url,location.href);return u.origin===location.origin && u.pathname==='/api/reader/progress'; } catch {return false;}
   }
+  // Keep the server snapshot in memory only. Serialize this browser's own saves
+  // so a preflight cannot mistake an earlier in-flight save for another reader.
+  const readingSnapshots = new Map();
+  let syncTail = Promise.resolve(), leavingForSync = false;
+  const positionKey = data => JSON.stringify([Number(data.pageNum),data.bookScrollId || '']);
+  function syncSerial(task) {
+    const result=syncTail.then(task);syncTail=result.catch(()=>{});return result;
+  }
+  function syncPrompt(remote, unavailable=false) {
+    document.dispatchEvent(new Event('kavita-reading-conflict'));
+    return new Promise(resolve=>{
+      const dialog=document.createElement('dialog');dialog.id='kavita-reading-sync-dialog';
+      dialog.style.cssText='max-width:min(420px,90vw);border:0;border-radius:12px;padding:24px;color:#222;background:white;box-shadow:0 8px 40px #0008;';
+      const text=document.createElement('p');
+      let pageText='';
+      const root=document.querySelector('app-book-reader'),g=root&&geometry(root);
+      const marker=remote?.bookScrollId?.match(resumePattern);
+      if(g&&marker&&marker[1]===layoutKey(g)&&counts.length&&counts.every(n=>Number.isInteger(n)&&n>0)&&Number(remote.pageNum)<counts.length)
+        pageText=` (현재 화면 기준 ${counts.slice(0,Number(remote.pageNum)).reduce((a,b)=>a+b,0)+Math.floor(Number(marker[2]))+1}페이지)`;
+      text.textContent=unavailable?'최신 읽기 위치를 확인하지 못했습니다. 연결을 확인한 후 다시 시도하세요. 오래된 위치는 저장하지 않습니다.':
+        `다른 브라우저에서 읽기 위치가 변경되었습니다${pageText}. 저장된 최신 위치로 이동하시겠습니까?`;
+      dialog.append(text);
+      const finish=value=>{dialog.remove();resolve(value);};
+      for(const [label,value] of unavailable?[['다시 확인','retry'],['취소','cancel']]:[['최신 위치로 이동','move'],['여기서 계속 읽기','stay']]){
+        const button=document.createElement('button');button.type='button';button.textContent=label;button.style.cssText='margin:6px;padding:8px 12px';
+        button.addEventListener('click',()=>finish(value));dialog.append(button);
+      }
+      dialog.addEventListener('cancel',event=>{event.preventDefault();finish('cancel');});
+      document.body.append(dialog);dialog.showModal();
+    });
+  }
+  async function checkReadingPosition(id, headers, cancelled=()=>false) {
+    const state=readingSnapshots.get(String(id));
+    if(!state)return true; // Only protect EPUBs whose native initial snapshot was observed.
+    while(!leavingForSync&&!cancelled()) {
+      let remote;
+      try {
+        const response=await nativeFetch(`/api/reader/get-progress?chapterId=${encodeURIComponent(id)}`,{
+          headers:headers?.has('authorization')?headers:state.headers,credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(8000)});
+        if(!response.ok)throw new Error('progress unavailable');
+        remote=await response.json();
+        if(!Number.isInteger(remote.pageNum)||(remote.bookScrollId!=null&&typeof remote.bookScrollId!=='string'))throw new Error('invalid progress');
+      } catch {
+        if(cancelled())return false;
+        if(await syncPrompt(null,true)==='retry')continue;
+        return false;
+      }
+      if(cancelled())return false;
+      state.checked=performance.now();
+      if(positionKey(remote)===positionKey(state.position))return true;
+      const choice=await syncPrompt(remote);
+      if(cancelled())return false;
+      if(choice==='cancel')return false;
+      if(choice==='move') {
+        leavingForSync=true;resume=null;
+        // Native reload obtains the latest server XPath and uses the existing
+        // precise-screen restoration. Never submit the stale pending body.
+        location.reload();return false;
+      }
+      state.position=remote;
+      // Recheck after the user chooses: another device may have moved while
+      // the dialog was open. Only an unchanged snapshot permits the local save.
+    }
+    return false;
+  }
+  window.__kavitaBeforeNavigation=()=>syncSerial(async()=>{
+    if(leavingForSync)return false;
+    const state=book&&readingSnapshots.get(book.id);
+    if(!state||performance.now()-state.checked<250)return true;
+    return checkReadingPosition(book.id,book.headers);
+  });
   function enrichProgress(body) {
     try {
       const data=JSON.parse(body),root=document.querySelector('app-book-reader');
@@ -590,9 +663,12 @@
   function observe(info, text, headers) {
     if (!info) return;
     if (info.type==='progress') {
-      if(info.epoch!==navigationEpoch)return;
       try {
-        const data=JSON.parse(text),match=typeof data.bookScrollId==='string'&&data.bookScrollId.match(resumePattern);
+        const data=JSON.parse(text);
+        if(!readingSnapshots.has(info.id)&&Number.isInteger(data.pageNum)&&(data.bookScrollId==null||typeof data.bookScrollId==='string'))
+          readingSnapshots.set(info.id,{position:data,headers:new Headers(headers),checked:-Infinity});
+        if(info.epoch!==navigationEpoch)return;
+        const match=typeof data.bookScrollId==='string'&&data.bookScrollId.match(resumePattern);
         resume=match&&Number.isFinite(Number(match[2]))?{id:info.id,page:data.pageNum,layout:match[1],fraction:Number(match[2]),path:data.bookScrollId,time:performance.now()}:null;
       } catch {resume=null;} return;
     }
@@ -613,7 +689,8 @@
   }
   // Observe the reader's own authenticated GETs; never log or persist credentials.
   const requests = new WeakMap();
-  const open = XMLHttpRequest.prototype.open, setHeader = XMLHttpRequest.prototype.setRequestHeader, send = XMLHttpRequest.prototype.send;
+  const open = XMLHttpRequest.prototype.open, setHeader = XMLHttpRequest.prototype.setRequestHeader, send = XMLHttpRequest.prototype.send, abort = XMLHttpRequest.prototype.abort;
+  XMLHttpRequest.prototype.abort=function(){const r=requests.get(this);if(r)r.cancelled=true;return abort.call(this);};
   XMLHttpRequest.prototype.open = function(method, url, ...args) {
     requests.set(this, {info:method.toUpperCase() === 'GET' ? requestInfo(url) : null, progress:method.toUpperCase()==='POST'&&progressURL(url), headers:new Headers()});
     return open.call(this, method, url, ...args);
@@ -624,7 +701,26 @@
   };
   XMLHttpRequest.prototype.send = function(...args) {
     const r = requests.get(this);
-    if(r?.progress&&typeof args[0]==='string')args[0]=enrichProgress(args[0]);
+    if(r?.progress&&typeof args[0]==='string') {
+      args[0]=enrichProgress(args[0]);
+      let data;try{data=JSON.parse(args[0]);}catch{return send.apply(this,args);}
+      if(readingSnapshots.has(String(data.chapterId))) {
+        const cancelled=()=>r.cancelled||requests.get(this)!==r;
+        void syncSerial(async()=>{
+          if(!await checkReadingPosition(data.chapterId,r.headers,cancelled)) {
+            if(!cancelled()){abort.call(this);this.dispatchEvent(new ProgressEvent('abort'));this.dispatchEvent(new ProgressEvent('loadend'));}return;
+          }
+          if(cancelled())return;
+          await new Promise(resolve=>{
+            this.addEventListener('loadend',()=>{
+              if(this.status>=200&&this.status<300)readingSnapshots.get(String(data.chapterId)).position=data;
+              resolve();
+            },{once:true});
+            try{send.apply(this,args);}catch{resolve();}
+          });
+        });return;
+      }
+    }
     if (r?.info) this.addEventListener('load', () => {
       if (this.status === 200) {
         try { observe(r.info, this.responseType === 'json' ? JSON.stringify(this.response) : this.responseText, r.headers); } catch {}
@@ -638,6 +734,19 @@
     if(method.toUpperCase()==='POST'&&progressURL(url)) {
       if(typeof init?.body==='string')init={...init,body:enrichProgress(init.body)};
       else if(input instanceof Request&&!init?.body)input=new Request(input,{body:enrichProgress(await input.clone().text())});
+    }
+    if(method.toUpperCase()==='POST'&&progressURL(url)) {
+      const body=typeof init?.body==='string'?init.body:input instanceof Request?await input.clone().text():null;
+      let data;try{data=JSON.parse(body);}catch{}
+      if(data&&readingSnapshots.has(String(data.chapterId)))return syncSerial(async()=>{
+        const signal=init?.signal??(input instanceof Request?input.signal:null);
+        const cancelled=()=>!!signal?.aborted;
+        const headers=new Headers(init?.headers??(input instanceof Request?input.headers:undefined));
+        if(!await checkReadingPosition(data.chapterId,headers,cancelled))throw new DOMException('Reading position save cancelled','AbortError');
+        const response=await nativeFetch(input,init);
+        if(response.ok)readingSnapshots.get(String(data.chapterId)).position=data;
+        return response;
+      });
     }
     const info = method.toUpperCase() === 'GET' ? requestInfo(url) : null;
     const response = await nativeFetch(input,init);
