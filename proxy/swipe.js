@@ -613,6 +613,9 @@
     #kavita-reading-toc {flex:0 1 auto;min-width:0;max-width:calc(100% - 110px);padding:1px 7px;border-radius:8px;color:#fff;background:rgba(0,0,0,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     [data-kavita-page-footer] {grid-template-columns:auto minmax(0,1fr) auto!important}
     [data-kavita-page-footer-center] {display:flex;min-width:0;gap:8px;align-items:center;margin-top:0!important}
+    [data-kavita-page-footer-center].kv-page-only {justify-content:center!important;position:relative}
+    [data-kavita-page-footer-center].kv-page-only #kavita-screen-page-indicator {margin-left:0}
+    [data-kavita-page-footer-center].kv-page-only [data-kavita-native-completion] {position:absolute;right:0;top:50%;transform:translateY(-50%);white-space:nowrap}
     #kavita-reading-summary.in-native-footer {position:static;left:auto!important;right:auto!important;bottom:auto!important;flex:1 1 auto;min-width:0;display:flex;justify-content:flex-start}
     #kavita-reading-toc {max-width:100%}
     #kavita-reading-summary[hidden] {display:none!important}
@@ -632,7 +635,7 @@
       let control=settings.querySelector('[data-kavita-reading-summary]');
       if(!control) {
         const holder=document.createElement('div');holder.className='controls my-3';
-        holder.innerHTML='<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-reading-summary><span class="form-check-label">목차·진행률 표시</span></label><small class="d-block">좌측 하단에 목차 제목을 표시하고, 페이지 숫자에 전체 화면 페이지 기준 진행률(%)을 함께 표시합니다. 설정은 이 브라우저에 저장됩니다.</small>';
+        holder.innerHTML='<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-reading-summary><span class="form-check-label">목차·진행률 표시</span></label><small class="d-block">좌측 하단에 목차 제목을 표시하고, 페이지 숫자에 전체 화면 페이지 기준 진행률(%)을 함께 표시합니다. 끄면 하단바 페이지 숫자만 가운데에 표시하며 집중 모드의 별도 페이지 표시는 숨깁니다. 설정은 이 브라우저에 저장됩니다.</small>';
         row.after(holder);control=holder.querySelector('input');
         control.addEventListener('change',()=>{const key=summaryKey();summaryPreferences.set(key,control.checked);try{localStorage.setItem(key,String(control.checked));}catch{}update();});
       }
@@ -650,12 +653,13 @@
       if(completion?.matches('.d-none.d-sm-block'))completion.setAttribute('data-kavita-native-completion','');
       if(summary.previousElementSibling!==original||label.previousElementSibling!==summary)original.after(summary,label);
       original.parentElement.setAttribute('data-kavita-page-footer-center','');
+      original.parentElement.classList.toggle('kv-page-only',!summaryEnabled());
       original.closest('.action-bar')?.setAttribute('data-kavita-page-footer','');
       label.classList.add('in-native-footer');summary.classList.add('in-native-footer');
     } else {
       if(label.parentElement!==document.body||summary.parentElement!==document.body)document.body.append(label,summary);
       label.classList.remove('in-native-footer');summary.classList.remove('in-native-footer');
-      root?.querySelectorAll('[data-kavita-page-footer],[data-kavita-page-footer-center]').forEach(n=>{n.removeAttribute('data-kavita-page-footer');n.removeAttribute('data-kavita-page-footer-center');});
+      root?.querySelectorAll('[data-kavita-page-footer],[data-kavita-page-footer-center]').forEach(n=>{n.classList.remove('kv-page-only');n.removeAttribute('data-kavita-page-footer');n.removeAttribute('data-kavita-page-footer-center');});
       root?.querySelectorAll('[data-kavita-native-page-label],[data-kavita-native-completion]').forEach(n=>{n.removeAttribute('data-kavita-native-page-label');n.removeAttribute('data-kavita-native-completion');});
     }
   }
@@ -1108,12 +1112,12 @@
     if(popup||!root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2')) {label.hidden=true;return;}
     if(root.querySelector('.is-loading')||root.classList.contains('swipe-restoring-menu')||(book&&performance.now()<book.renderAfter)) {
       // Keep a known total steady while a section loads; don't flash a calculation placeholder.
-      label.hidden=!/^\d+ \/ \d+$/.test(label.dataset.pages||'');return;
+      label.hidden=!/^\d+ \/ \d+$/.test(label.dataset.pages||'')||(!summaryEnabled()&&!label.classList.contains('in-native-footer'));return;
     }
     const g=geometry(root);if(!g){label.hidden=true;return;}
     if(document.fonts.status!=='loaded'||[...g.content.querySelectorAll('img')].some(img=>!img.complete))return;
     restoreScreen(root,g);
-    label.hidden=false;
+    label.hidden=!summaryEnabled()&&!label.classList.contains('in-native-footer');
     if(!book){label.textContent='계산 중';label.dataset.pages='계산 중';label.title='책 전체 페이지 계산 준비 중';updateSummary(g,null);return;}
     const css=getComputedStyle(g.content);
     const key=calculationKey(root,g);

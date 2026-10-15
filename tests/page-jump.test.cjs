@@ -62,7 +62,14 @@ const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p id="p$
     await page.locator('app-epub-setting-drawer').evaluate(n=>n.remove());
   }
   await summarySettings(false);await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').hidden);
-  assert.equal(await label.isVisible(),true,'option hides only title/progress, keeping page navigation');
+  assert.equal(await label.isVisible(),true,'native footer keeps the page number when summary is off');
+  assert.equal(await label.textContent(),`1/${total}`,'summary off removes percentage');
+  const centered=await label.evaluate(n=>{const r=n.getBoundingClientRect(),p=n.parentElement.getBoundingClientRect();return Math.abs((r.left+r.right-p.left-p.right)/2)<2;});assert.ok(centered,'native footer page number is centered with summary off');
+  await page.evaluate(()=>closeMenu());await page.waitForFunction(()=>document.querySelector('#kavita-screen-page-indicator')?.hidden);
+  assert.equal(await label.isVisible(),false,'summary off hides floating page counter in immersive mode');assert.equal(await summary.isVisible(),false);
+  const offFirstFrame=await page.evaluate(async()=>{openMenu();await new Promise(requestAnimationFrame);const n=document.querySelector('#kavita-screen-page-indicator');return {visible:!n.hidden,centered:n.parentElement.classList.contains('kv-page-only'),inline:!!n.closest('.bottom-bar')};});
+  assert.deepEqual(offFirstFrame,{visible:true,centered:true,inline:true},'menu returns directly to centered page-only layout');
+
   assert.equal(await page.evaluate(()=>localStorage.getItem('kavita-reading-summary-v1:11')),'false');
   await page.evaluate(()=>localStorage.setItem('kavita-user',JSON.stringify({id:12,username:'other'})));await summary.waitFor();
   await page.evaluate(()=>localStorage.setItem('kavita-user',JSON.stringify({id:11,username:'fixture'})));await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').hidden);
