@@ -13,7 +13,7 @@
   "proxy/pwa/logo.svg": "26205b7315e844a0fdfed83395b0b9ff0ff1138fb892c5527b5ab236c40e58af",
   "proxy/pwa/manifest.webmanifest": "66d6b35294f8af823f773799ea7bd1a33b520f121973add83f9624730e4a571a",
   "proxy/pwa/offline/app.js": "fc86240e6fc836afcba5d2d1e398c2d5e7479ccbc3d5766db12c3af2bef2f783",
-  "proxy/pwa/offline/bridge.js": "91deb1a101809c866d83984f741668ebbec5a12a51f37b0de285bd8c36a534a0",
+  "proxy/pwa/offline/bridge.js": "727ebed80d9f0f8081c263e050fffa45169c9a72f0ccc8d4c36c7fc42df93411",
   "proxy/pwa/offline/disable-worker.js": "f09452f7ea83cb0f55e4e0255299570bbb357062e07865280970560060b619c1",
   "proxy/pwa/offline/download.js": "dc696e2e40c23ec602136ececc8f36548ff5de93102c7001e0068807a05e71c0",
   "proxy/pwa/offline/index.html": "7971e7f34173c0250c61ce09b59b01068a4325548e29d9e5f5ae63f3c8f6398c",
@@ -22,5 +22,5 @@
   "proxy/pwa/offline/offline.css": "77681fb105ea039cb90b34e947f4aa838d56a4b0eb7b6d47d2a454fcd4c2c5d3",
   "proxy/pwa/offline/store.js": "890fd98a949898b0873160e88b034f1f82983ede7a26b3dd4626b93b2fdf4b3a",
   "proxy/pwa/offline/sync.js": "e14c6ccd5dcc4c26c24c8e75100354af6c207e96a1296bfa792a7b3125b64d79",
-  "proxy/pwa/offline/worker.js": "93bb81b6f14f4ec006e77af45a10ecc2c3b2dee7bc8dbdc0d097e8a67f030bd3"
+  "proxy/pwa/offline/worker.js": "6401562bb320e9ad51c95a6358e93e1bc9e156121d9e02db3f282c52b42d3803"
 }

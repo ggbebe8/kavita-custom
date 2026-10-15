@@ -35,5 +35,21 @@ const server=http.createServer((req,res)=>{
  format=1;await setup('/library/1/series/2/chapter/100','app-chapter-detail');await page.getByRole('button',{name:'오프라인 저장',exact:true}).click();await page.getByText('현재 EPUB 책만 오프라인 저장을 지원합니다.').waitFor();assert.equal(new URL(page.url()).pathname,'/library/1/series/2/chapter/100');
  await page.evaluate(()=>{history.pushState(null,'','/library/1/series/2/book/100');document.querySelector('main').innerHTML='<app-book-reader><div class="reader-header"><button><i class="fa-clipboard-question"></i></button></div></app-book-reader>';});
  await page.waitForTimeout(100);assert.equal(await page.locator('[data-kavita-offline]').count(),0,'download control removed from book reader');
- assert.deepEqual(errors,[]);console.log('Offline detail button passed: read-adjacent layout, no duplicates, series continue-point, exact chapter ID, EPUB validation, reader removal and authenticated GET only.');
+ // The reading theme can use black text while the application uses dark
+ // chrome. The offline badge must remain readable with that combination.
+ await page.evaluate(()=>{history.replaceState(null,'','/library/1/series/2/book/100?kv-offline=1');document.documentElement.style.setProperty('--body-text-color','#000');document.documentElement.style.setProperty('--body-bg','#171b24');document.querySelector('.reader-header').append(document.createElement('span'));});
+ const badge=page.locator('[data-kavita-offline-native]');await badge.waitFor();
+ assert.equal(await badge.textContent(),'오프라인 저장본');
+ const contrast=await badge.evaluate(node=>{
+  const style=getComputedStyle(node);
+  const luminance=color=>{const rgb=color.match(/[\d.]+/g).slice(0,3).map(n=>{const c=Number(n)/255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4;});return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;};
+  const a=luminance(style.color),b=luminance(style.backgroundColor);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+ });
+ assert.ok(contrast>=4.5,'offline badge text must contrast with its own background despite reader theme');
+ await page.evaluate(()=>document.querySelector('.reader-header').remove());await page.waitForTimeout(100);
+ assert.equal(await badge.count(),0,'badge disappears with header in immersive mode');
+ await page.evaluate(()=>document.querySelector('app-book-reader').innerHTML='<div class="reader-header"></div>');await badge.waitFor();
+ assert.equal(await badge.count(),1,'restoring menu creates one readable badge');
+ await badge.click();await page.waitForURL('**/kavita-pwa/offline/index.html');
+ assert.deepEqual(errors,[]);console.log('Offline detail button passed: read-adjacent layout, no duplicates, series continue-point, exact chapter ID, EPUB validation, reader removal, readable offline badge under black-text themes, immersive restoration and authenticated GET only.');
 }finally{await browser.close();await new Promise(r=>server.close(r));}})().catch(e=>{console.error(e);process.exitCode=1;server.close();});

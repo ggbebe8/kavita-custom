@@ -22,7 +22,7 @@ if(isSecureContext&&'serviceWorker' in navigator){
       const header=root.querySelector('.reader-header');
       if(header&&!header.querySelector('[data-kavita-offline-native]')){
         const badge=document.createElement('a');badge.dataset.kavitaOfflineNative='';badge.href=base+'index.html';badge.textContent='오프라인 저장본';badge.title='읽기 위치·메모는 기기에 먼저 저장합니다. 연결되면 자동 동기화합니다. 클릭하면 오프라인 책장으로 이동합니다.';
-        badge.style.cssText='position:absolute;right:4px;top:100%;font:10px system-ui;padding:1px 4px;background:var(--body-bg,#171b24);color:var(--body-text-color,#aaa);border-radius:0 0 3px 3px;text-decoration:none';header.append(badge);
+        badge.style.cssText='position:absolute;right:4px;top:100%;font:11px/1.5 system-ui,sans-serif;padding:1px 5px;background:#202938;color:#fff;white-space:nowrap;border-radius:0 0 3px 3px;text-decoration:none';header.append(badge);
       }
     }
     // Download belongs beside the native Read/Continue button on the detail
