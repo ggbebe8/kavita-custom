@@ -48,6 +48,11 @@ export async function nativeRequest(request){
   if(request.method==='GET'){
     if(path==='/api/account/refresh-account')return response(JSON.parse(localStorage.getItem('kavita-user'))); // already existing local login, never stored again here
     if(path==='/api/account/oidc-authenticated')return response('false',200,'text/plain');
+    // Admin AppComponent also asks for billing/subscription information on
+    // reader startup. It is optional and has no offline purpose: return the
+    // nullable DTO contract, without fetching or storing billing data. This
+    // also supports older saved books that have no license/info snapshot.
+    if(path==='/api/license/info')return response(null);
     if(path==='/api/reader/get-progress')return response(state.progress);
     if(path==='/api/annotation/all')return response(notes(state));
     if(/^\/api\/annotation\/-?\d+$/.test(path)){const id=Number(path.split('/').at(-1)),op=state.nativeIds?.[id];return response(notes(state).find(n=>n.id===(state.nativeServerIds?.[id]||id))||(op?state.annotations.find(n=>createId(n)===op):null)||null);}

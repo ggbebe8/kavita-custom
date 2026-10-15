@@ -21,6 +21,15 @@ const server=http.createServer((req,res)=>{const u=new URL(req.url,'http://local
  await page.evaluate(()=>new Promise((resolve,reject)=>{const c=new MessageChannel();c.port1.onmessage=e=>e.data.ok?resolve():reject(new Error(e.data.error));navigator.serviceWorker.controller.postMessage({type:'KAVITA_NATIVE_PRECACHE'},[c.port2]);}));
  await context.setOffline(true);
  assert.equal(await page.evaluate(async()=>(await window.nativeLazy()).saved),true,'unvisited lazy chunks with Vary headers are available offline');
+ // Admin AppComponent asks for subscription info on every reader entry.
+ // Old saved books have no snapshot for this optional online-only endpoint.
+ const license=await page.evaluate(async()=>{
+  const s=await import('/kavita-pwa/offline/store.js'),before=await s.get('states','101:1');
+  const r=await fetch('/api/license/info?forceCheck=false');
+  return {status:r.status,data:await r.json(),before,after:await s.get('states','101:1')};
+ });
+ assert.equal(license.status,200,'optional subscription bootstrap must not trigger the generic Angular error toast');
+ assert.equal(license.data,null);assert.deepEqual(license.after,license.before);assert.equal(apiNetwork,0);
  const offlineRenewal=await page.evaluate(async()=>{
   const before=localStorage.getItem('kavita-user');
   const r=await fetch('/api/account/refresh-token',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});

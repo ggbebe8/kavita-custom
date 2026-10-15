@@ -20,7 +20,15 @@ const server=http.createServer((req,res)=>{
 });
 (async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin=`http://127.0.0.1:${server.address().port}`,browser=await chromium.launch({headless:true});
  try{
-  const context=await browser.newContext({viewport:{width:393,height:851},isMobile:true,hasTouch:true});await context.addInitScript(u=>localStorage.setItem('kavita-user',JSON.stringify(u)),user);const page=await context.newPage(),errors=[];page.on('framenavigated',f=>{if(f.url().includes('kv-prepare'))console.log('Native warm-up started')});page.on('response',r=>{if(r.status()>=400&&!new URL(r.url()).pathname.startsWith('/api/'))console.log('Static failed:',new URL(r.url()).pathname,r.status())});page.on('pageerror',e=>{errors.push(e.message);console.log('JSERROR',e.message)});
+  const context=await browser.newContext({viewport:{width:393,height:851},isMobile:true,hasTouch:true});await context.addInitScript(u=>localStorage.setItem('kavita-user',JSON.stringify(u)),user);
+  // Capture transient Angular errors as well as fatal JS errors, including
+  // warm-up and re-entry. A working book body does not prove error-free startup.
+  await context.addInitScript(()=>document.addEventListener('DOMContentLoaded',()=>{
+    const seen=new WeakSet();
+    new MutationObserver(()=>{for(const node of document.querySelectorAll('.toast-error .toast-message'))if(!seen.has(node)){seen.add(node);console.info('KAVITA_TEST_ERROR_TOAST:'+node.textContent.trim());}}).observe(document.body,{childList:true,subtree:true});
+  }));
+  const page=await context.newPage(),errors=[],errorToasts=[];
+  page.on('console',message=>{if(message.text().startsWith('KAVITA_TEST_ERROR_TOAST:'))errorToasts.push(message.text().slice('KAVITA_TEST_ERROR_TOAST:'.length));});page.on('framenavigated',f=>{if(f.url().includes('kv-prepare'))console.log('Native warm-up started')});page.on('response',r=>{if(r.status()>=400&&!new URL(r.url()).pathname.startsWith('/api/'))console.log('Static failed:',new URL(r.url()).pathname,r.status())});page.on('pageerror',e=>{errors.push(e.message);console.log('JSERROR',e.message)});
   await page.goto(origin+`/kavita-pwa/offline/index.html?download=${chapter}`);await page.getByRole('button',{name:'이 책을 오프라인으로 저장',exact:true}).click();
   await page.waitForFunction(()=>location.search==='?kv-offline=1'||(document.getElementById('status')?.textContent.includes('못했')||document.getElementById('status')?.textContent.includes('실패')),{},{timeout:180000});
   if(!page.url().includes('kv-offline=1'))throw new Error(await page.locator('#status').textContent());
@@ -58,6 +66,12 @@ const server=http.createServer((req,res)=>{
     const imageURL=new DOMParser().parseFromString(html,'text/html').querySelector('img').src;
     const img=new Image();img.src=imageURL;await new Promise(r=>{img.onload=r;img.onerror=r;});return {local:imageURL.startsWith('blob:'),width:img.naturalWidth};
   },chapter);assert.ok(imageCheck.local);assert.ok(imageCheck.width>0,JSON.stringify(imageCheck));
+  // Repeat the user's exact entry path with an already saved book, offline.
+  await page.goto(origin+'/kavita-pwa/offline/index.html');
+  await page.getByRole('button',{name:'읽기',exact:true}).click();
+  await page.waitForSelector('app-book-reader .book-content',{timeout:45000});
+  await page.waitForTimeout(2000);
+  assert.deepEqual(errorToasts,[],'Reader startup, offline reload and saved-book re-entry must not show red error toasts');
   await page.screenshot({path:'/tmp/kavita-native-offline.png'});
   assert.equal(blockedWrites,0);assert.deepEqual(errors,[]);console.log('Real Kavita EPUB download/offline render passed:',JSON.stringify(info),'Original reader, settings/notes drawers, full-book page count, images, offline reload and original CSP passed. No API writes were sent; actual Android touch was not tested.');
  }finally{await browser.close();await new Promise(r=>server.close(r));}
