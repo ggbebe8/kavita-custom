@@ -1,9 +1,9 @@
 {
   "install.py": "471db8988e74752c9701e9ae8975223a61a9ff7d9f4b1bc47d1c6ed9ba51dd28",
   "README.md": "66979e37752cc7a4a2ec1dc9c87947d6c807df20b0edeb94bc911600ab6edcb6",
-  "OFFLINE.md": "a93337e416646be8c3529e4fef551cdbfdda6f52790f98d964f3a87285eb3fe2",
+  "OFFLINE.md": "99a31230bb870c4d39bb85c92cae63f56001ce0978fe53b1134839f99e001896",
   "images.json": "1ce0765259f71b20473d75cf220a741ab7a27823614345b170cb71ecd58e39bf",
-  "proxy/swipe.js": "3799aac1f33c98164e96f153fbdc60488994216ee95499780c924b1973d5f799",
+  "proxy/swipe.js": "243d66e764ff33e6252b70cf9ee15a208d749f82cb7cf5a3e3300818a46aa949",
   "proxy/default.conf": "ced32a3ad7a961c54dd42b2a0611f0e8fe4cb3a0da500a54c614f436b1f908ea",
   "proxy/https.Caddyfile.example": "97134b932561eacec8d9a54cd6550325834c87fc481d4878ab7d771ea613d003",
   "proxy/pwa/SOURCES.md": "2353990615945fc1a7fc50a401584e78c0eef3013c22346b3074e1161d2859d9",
@@ -15,12 +15,12 @@
   "proxy/pwa/offline/app.js": "fc86240e6fc836afcba5d2d1e398c2d5e7479ccbc3d5766db12c3af2bef2f783",
   "proxy/pwa/offline/bridge.js": "727ebed80d9f0f8081c263e050fffa45169c9a72f0ccc8d4c36c7fc42df93411",
   "proxy/pwa/offline/disable-worker.js": "f09452f7ea83cb0f55e4e0255299570bbb357062e07865280970560060b619c1",
-  "proxy/pwa/offline/download.js": "dc696e2e40c23ec602136ececc8f36548ff5de93102c7001e0068807a05e71c0",
+  "proxy/pwa/offline/download.js": "765142d157381890a4dfd28b876cdcdbea762d2d0a95a0ca414fe52fbb2324d0",
   "proxy/pwa/offline/index.html": "7971e7f34173c0250c61ce09b59b01068a4325548e29d9e5f5ae63f3c8f6398c",
   "proxy/pwa/offline/native-bootstrap.js": "316b3248212a9d8309db95d65775c736ce16dd54f4b05ad6314b4ee1f15d0b12",
   "proxy/pwa/offline/native.js": "d754a1c9e6f8869d824acc195bd020fe43f58e22c9879d96440d39e38bfda8db",
   "proxy/pwa/offline/offline.css": "77681fb105ea039cb90b34e947f4aa838d56a4b0eb7b6d47d2a454fcd4c2c5d3",
   "proxy/pwa/offline/store.js": "890fd98a949898b0873160e88b034f1f82983ede7a26b3dd4626b93b2fdf4b3a",
   "proxy/pwa/offline/sync.js": "e14c6ccd5dcc4c26c24c8e75100354af6c207e96a1296bfa792a7b3125b64d79",
-  "proxy/pwa/offline/worker.js": "ab00f05691a47654beb7016e5238e9884f122394af289113b07074fe0b1e788c"
+  "proxy/pwa/offline/worker.js": "24e497a8db447b4b22dc6842bd04dee4a56934d2b6ac9eb3f72b1371d804d600"
 }

@@ -447,6 +447,10 @@
     });
   }
   async function checkReadingPosition(id, headers, cancelled=()=>false) {
+    // Saved-book mode writes to IndexedDB, and offline sync owns remote
+    // conflicts. The online guard can otherwise wait on a network-only
+    // confirmation during reader startup or page turns (notably in Firefox).
+    if(new URLSearchParams(location.search).get('kv-offline')==='1')return true;
     const state=readingSnapshots.get(String(id));
     if(!state)return true; // Only protect EPUBs whose native initial snapshot was observed.
     while(!leavingForSync&&!cancelled()) {

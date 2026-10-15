@@ -49,6 +49,8 @@ async function until(check){const deadline=Date.now()+15000;while(!await check()
  try{
   const context=await browser.newContext({viewport:{width:393,height:851},isMobile:true,hasTouch:true});
   await context.addInitScript(()=>{if(!localStorage.getItem('kavita-user'))localStorage.setItem('kavita-user',JSON.stringify({id:101,username:'reader',token:'fixture-token'}));});
+  // A pending Firefox storage permission must not block a committed book.
+  await context.addInitScript(()=>Object.defineProperty(navigator.storage,'persist',{value:()=>new Promise(()=>{})}));
   const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto(origin+'/kavita-pwa/offline/index.html?download=1');
   await page.getByRole('button',{name:'이 책을 오프라인으로 저장',exact:true}).click();

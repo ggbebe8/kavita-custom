@@ -83,7 +83,11 @@ export async function downloadBook(chapterId,{status=()=>{},signal}={}){
   await commitBook(book,{key,account,progress:{...metadata,...baseProgress},baseProgress,annotations,drafts:{},dirty:false,revision:0,view:null});
   // The browser may reject persistent storage; a saved book still works but is
   // subject to the browser's normal eviction policy.
-  let persistent=false;try{persistent=await navigator.storage?.persist?.()||false;}catch{}
+  let persistent=false,timer;
+  // Firefox can leave the permission prompt pending indefinitely. The book
+  // transaction has already committed; optional eviction protection must not
+  // prevent the reader from opening. Late rejection remains handled.
+  try{persistent=await Promise.race([Promise.resolve(navigator.storage?.persist?.()).catch(()=>false),new Promise(resolve=>{timer=setTimeout(()=>resolve(false),1000);})])||false;}catch{}finally{clearTimeout(timer);}
   status((persistent?'책 저장 완료':'책 저장 완료 · 브라우저 저장 공간 정리 시 삭제될 수 있습니다.')+(warnings.length?' 일부 글꼴은 기본 글꼴로 표시합니다.':''));return book;
 }
 export function rewriteAssets(html,urls){

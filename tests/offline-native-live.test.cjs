@@ -1,6 +1,8 @@
 // Optional integration check: requires a mode-0600 temporary login DTO file.
 // The proxy rejects every non-GET API request before reaching the real server.
-const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');const {chromium}=require('playwright');
+const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');const {chromium,firefox}=require('playwright');
+const browserName=process.env.KAVITA_OFFLINE_TEST_BROWSER||'chromium';
+if(!['chromium','firefox'].includes(browserName))throw new Error('Unsupported test browser');
 const auth=process.env.KAVITA_OFFLINE_TEST_USER_FILE;if(!auth){console.log('Skipped live read-only test: set KAVITA_OFFLINE_TEST_USER_FILE.');process.exit(0);}
 const user=JSON.parse(fs.readFileSync(auth,'utf8')),chapter=Number(process.env.KAVITA_OFFLINE_TEST_CHAPTER||2),root=path.resolve('proxy/pwa/offline');let blockedWrites=0;
 const server=http.createServer((req,res)=>{
@@ -18,9 +20,9 @@ const server=http.createServer((req,res)=>{
  if((!file.startsWith(root+path.sep)&&file!==path.resolve('proxy/swipe.js'))||!fs.existsSync(file)){res.writeHead(404);res.end();return;}
  res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':'text/html; charset=utf-8'});res.end(fs.readFileSync(file));
 });
-(async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin=`http://127.0.0.1:${server.address().port}`,browser=await chromium.launch({headless:true});
+(async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin=`http://127.0.0.1:${server.address().port}`,browser=await ({chromium,firefox})[browserName].launch({headless:true});
  try{
-  const context=await browser.newContext({viewport:{width:393,height:851},isMobile:true,hasTouch:true});await context.addInitScript(u=>localStorage.setItem('kavita-user',JSON.stringify(u)),user);
+  const context=await browser.newContext({viewport:{width:393,height:851},...(browserName==='chromium'?{isMobile:true,hasTouch:true}:{})});if(browserName==='firefox')await context.grantPermissions(['persistent-storage']);await context.addInitScript(u=>localStorage.setItem('kavita-user',JSON.stringify(u)),user);
   // Capture transient Angular errors as well as fatal JS errors, including
   // warm-up and re-entry. A working book body does not prove error-free startup.
   await context.addInitScript(()=>document.addEventListener('DOMContentLoaded',()=>{
@@ -40,10 +42,15 @@ const server=http.createServer((req,res)=>{
   await context.setOffline(true);const offlineResponse=await page.reload();assert.match(offlineResponse.headers()['content-security-policy']||'',/frame-ancestors 'none'/);await page.waitForSelector('app-book-reader .book-content',{timeout:45000});
   await page.waitForTimeout(2000);
   const saved=await page.evaluate(async chapter=>{const s=await import('/kavita-pwa/offline/store.js');return s.get('states',s.accountKey(chapter));},chapter);
-  assert.ok(saved.dirty,'Original Angular reader saves progress offline');
+  // Firefox may defer the initial save until navigation; exercise a real
+  // page turn instead of relying on an incidental startup save.
+  if(!saved.dirty){await page.evaluate(()=>{void window.__kavitaTurnPage(document.querySelector('app-book-reader'),1,'test');});await page.waitForFunction(async chapter=>{const s=await import('/kavita-pwa/offline/store.js');return (await s.get('states',s.accountKey(chapter))).dirty;},chapter,{timeout:15000});}
+
   // Empty measurement frames must not depend on a second network stylesheet
   // request; routing also disables Chromium's incidental HTTP resource cache.
-  await page.route('**/styles-*.css',route=>route.abort());
+  // Keep the Firefox live check free of request interception. Chromium
+  // separately checks that measurement does not refetch stylesheets.
+  if(browserName==='chromium')await page.route('**/styles-*.css',route=>route.abort());
   await page.locator('.reader-header button').filter({has:page.locator('.fa-bars')}).click();
   await page.waitForSelector('app-reader-settings,app-book-reader-settings,app-epub-reader-settings,.offcanvas.show,.drawer',{timeout:15000});
   const fontValue=await page.locator('#fontsize').evaluate(input=>{const value=Number(input.value)>=290?Number(input.value)-10:Number(input.value)+10;input.value=String(value);input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));return value;});
@@ -56,9 +63,12 @@ const server=http.createServer((req,res)=>{
   await page.waitForSelector('app-view-annotations-drawer',{timeout:15000});
   await page.locator('.offcanvas-header button').last().click();await page.waitForSelector('app-view-annotations-drawer',{state:'hidden'});
   try{await page.waitForFunction(()=>/^\d+ \/ \d+$/.test(document.getElementById('kavita-screen-page-indicator')?.dataset.pages||'')||document.getElementById('kavita-screen-page-indicator')?.dataset.pages==='—',{},{timeout:45000});if(await page.locator('#kavita-screen-page-indicator').evaluate(n=>n.dataset.pages)==='—')throw new Error('Page calculation failed');}catch(error){console.log('Counter state:',await page.evaluate(()=>({text:document.getElementById('kavita-screen-page-indicator')?.dataset.pages,title:document.getElementById('kavita-screen-page-indicator')?.title,section:document.querySelector('.reading-section')?.className,pending:window.__kavitaNativePending,error:window.__kavitaPageCalculationError})));throw error;}
+  // Closing a Firefox drawer can finish its font/layout update after the
+  // component becomes hidden. Wait for both displays to reflect that layout.
+  await page.waitForFunction(()=>/^\d+ \/ \d+$/.test(document.getElementById('kavita-screen-page-indicator')?.dataset.pages||'')&&/ · \d+%$/.test(document.getElementById('kavita-reading-summary')?.getAttribute('aria-label')||'')&&!document.getElementById('kavita-screen-page-indicator')?.disabled,{},{timeout:90000});
   assert.equal(await page.locator('#kavita-screen-page-indicator').evaluate(n=>!!n.closest('.bottom-bar')),true,'computed pages replace native footer');
   assert.equal(await page.locator('.bottom-bar a.btn-link').isVisible(),false,'native section count is hidden');
-  assert.match(await page.locator('#kavita-reading-summary').getAttribute('aria-label'),/ · \d+%$/,'TOC title and computed progress are shown offline');
+  await page.waitForFunction(()=>/ · \d+%$/.test(document.getElementById('kavita-reading-summary')?.getAttribute('aria-label')||''),{},{timeout:90000});
   const original=await page.locator('.book-content').innerText();
   await page.evaluate(()=>window.__kavitaTurnPage(document.querySelector('app-book-reader'),1,'test'));
   await page.waitForTimeout(1200);

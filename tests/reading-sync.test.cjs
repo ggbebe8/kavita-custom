@@ -48,6 +48,11 @@ const assert=require('node:assert/strict');
   const moving=save(b,43).catch(()=>{});await b.locator('#kavita-reading-sync-dialog').waitFor();
   await b.getByRole('button',{name:'최신 위치로 이동'}).click();await b.waitForLoadState();await moving;
   assert.equal(progress.pageNum,35);assert.equal(writes,before);
+  // Saved-book mode has its own durable queue/conflict resolution. The
+  // online preflight must not block its writes waiting for network progress.
+  await a.evaluate(()=>history.replaceState(null,'','/library/1/series/1/book/1?kv-offline=1'));offline=true;
+  const localSave=await Promise.race([save(a,99),new Promise(resolve=>setTimeout(()=>resolve('blocked'),1500))]);
+  assert.equal(localSave,200,'offline reader saves locally without online preflight');assert.equal(await a.locator('#kavita-reading-sync-dialog').count(),0);
   console.log('Cross-browser sync passed: stale saves held, explicit continuation, repeat conflict, network failure, XHR cancellation, latest-position reload without stale writes.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
