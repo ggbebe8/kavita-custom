@@ -22,7 +22,7 @@ const texts = [12,20,10].map(n => `<style>.book-content p { text-indent: 4px; }<
       if(u.pathname.endsWith('/book-page'))return route.fulfill({contentType:'text/html',body:texts[Number(u.searchParams.get('page'))]});
       return route.fulfill({contentType:'text/html',headers:{'Content-Security-Policy':"frame-ancestors 'none';"},body:`<html><head><base href="/"><link rel="stylesheet" href="reader.css"><style>
       body {margin:0} .reader-container {width:100vw} .book-content {height:360px;column-count:1;column-gap:20px;overflow:hidden;font:16px/24px sans-serif} p {margin:0 0 12px} .bottom-bar {position:fixed;bottom:0;left:0;width:100%;height:40px} 
-      </style></head><body><app-book-reader><div class="reader-container"><div class="reading-section column-layout-1"><div class="book-container immersive"><div class="book-content column-layout-1" style="max-height:360px"></div></div></div><div class="bottom-bar">Page 1 / 3 <button style="float:right">Next</button></div></div></app-book-reader></body></html>`});
+      </style></head><body><app-book-reader><div class="reader-container"><div class="reading-section column-layout-1"><div class="book-container immersive"><div class="book-content column-layout-1" style="max-height:360px"></div></div></div><div class="bottom-bar"><span><a class="btn-link">Page 1</a> / 3</span><button style="float:right">Next</button></div></div></app-book-reader></body></html>`});
     });
     await page.goto('http://fixture.test/library/1/series/1/book/1');
 
@@ -69,7 +69,7 @@ const texts = [12,20,10].map(n => `<style>.book-content p { text-indent: 4px; }<
     await page.waitForFunction(()=>/^\d+ \/ \d+$/.test(document.querySelector('#kavita-screen-page-indicator').textContent));
     assert(pageRequests()-beforeRequests>=texts.length,'Storage unavailable falls back to calculation');
     assert.equal(await page.evaluate(()=>document.querySelectorAll('iframe').length),0);
-    const overlaps=await page.evaluate(()=>{const a=document.querySelector('#kavita-screen-page-indicator').getBoundingClientRect(),b=document.querySelector('.bottom-bar').getBoundingClientRect();return a.bottom>b.top&&a.top<b.bottom;});assert.equal(overlaps,false);
+    const overlaps=await page.evaluate(()=>{const a=document.querySelector('#kavita-screen-page-indicator').getBoundingClientRect(),b=document.querySelector('.bottom-bar').getBoundingClientRect();return a.bottom>b.top&&a.top<b.bottom;});assert.equal(overlaps,true,'calculated pages occupy the native footer');assert.equal(await page.locator('.bottom-bar a.btn-link').isVisible(),false,'native section count hidden');
     // Chapter DOM decoration and attribute ordering are not layout settings.
     await page.evaluate(()=>{const c=document.querySelector('.book-content');c.classList.add('section-loaded');c.style.cssText='font-size:16px;max-height:360px';});
     beforeRequests=pageRequests();await navigate(1,true);
@@ -91,7 +91,7 @@ const texts = [12,20,10].map(n => `<style>.book-content p { text-indent: 4px; }<
     await page.evaluate(()=>{const c=document.querySelector('.book-content');c.className='book-content column-layout-2';c.style.columnCount='2';document.querySelector('.reading-section').className='reading-section column-layout-2';});
     counts=await expected();await navigate(0);
     await page.waitForFunction(expected=>document.querySelector('#kavita-screen-page-indicator').textContent===expected,`1 / ${counts.reduce((a,b)=>a+b,0)}`);
-    assert.equal(await page.evaluate(()=>document.querySelector('#kavita-screen-page-indicator').getBoundingClientRect().left>innerWidth/2),true);
+    assert.equal(await page.evaluate(()=>Math.abs((document.querySelector('#kavita-screen-page-indicator').getBoundingClientRect().left+document.querySelector('#kavita-screen-page-indicator').getBoundingClientRect().right)/2-innerWidth/2)<2),true);
     await page.evaluate(async ()=>{
       const root=document.querySelector('app-book-reader'),c=root.querySelector('.book-content');
       root.querySelector('.book-container').classList.remove('immersive');
@@ -111,6 +111,6 @@ const texts = [12,20,10].map(n => `<style>.book-content p { text-indent: 4px; }<
     assert(requests.some(r=>r.path==='/api/series/chapter'));
     assert(requests.some(r=>r.path==='/reader.css'));
     assert(!requests.some(r=>r.path==='/library/1/series/1/book/reader.css'));
-    console.log('Chromium tests passed: persistent cache hit, corrupt/blocked cache fallback, book revision invalidation, whole-book totals, section transition, screen advance, resize, two-column layout, EPUB CSS, immersive display, right alignment/no overlap, popup/exit hiding, authenticated GET only.');
+    console.log('Chromium tests passed: persistent cache hit, corrupt/blocked cache fallback, book revision invalidation, whole-book totals, section transition, screen advance, resize, two-column layout, EPUB CSS, immersive centered display, native footer replacement, popup/exit hiding, authenticated GET only.');
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

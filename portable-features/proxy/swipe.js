@@ -354,6 +354,7 @@
   window.__kavitaReaderSection=()=>book?{id:book.id,index:book.index,length:sections.get(book.id)}:null;
   const sections = new Map();
   const revisions = new Map();
+  const tablesOfContents = new Map();
   const memoryCache = new Map();
   const cachePrefix = 'kavita-screen-pages-v2:';
   const cacheAge = 14 * 24 * 60 * 60 * 1000;
@@ -593,9 +594,82 @@
   label.id = 'kavita-screen-page-indicator'; label.hidden = true;
   label.type = 'button'; label.disabled = true;
   label.setAttribute('aria-haspopup', 'dialog'); label.setAttribute('aria-live', 'off');
+  const summary = document.createElement('div');
+  summary.id = 'kavita-reading-summary'; summary.hidden = true;
+  summary.setAttribute('aria-live','off');
+  const summaryPreferences = new Map();
   const style = document.createElement('style');
-  style.textContent = '#kavita-screen-page-indicator { position: fixed; right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(5px + env(safe-area-inset-bottom, 0px)); z-index: 1031; padding: 1px 7px; border: 0; border-radius: 8px; font: 11px/1.4 system-ui,sans-serif; color: #fff; background: rgba(0,0,0,.55); cursor: pointer; user-select: none; white-space: nowrap; } #kavita-screen-page-indicator:disabled { cursor: default; } #kavita-screen-page-indicator:focus-visible { outline: 2px solid #fff; outline-offset: 2px; } #kavita-screen-page-indicator[hidden] { display: none !important; } #kavita-page-jump-message { position: fixed; bottom: 70px; right: 12px; max-width: 85vw; z-index: 1100; padding: 8px 12px; border-radius: 6px; color: #fff; background: #8b2525; font: 13px/1.5 system-ui,sans-serif; }';
-  document.head.appendChild(style); document.body.appendChild(label);
+  style.textContent = '#kavita-screen-page-indicator { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(5px + env(safe-area-inset-bottom, 0px)); z-index: 1031; padding: 1px 7px; border: 0; border-radius: 8px; font: 11px/1.4 system-ui,sans-serif; color: #fff; background: rgba(0,0,0,.55); cursor: pointer; user-select: none; white-space: nowrap; } #kavita-screen-page-indicator:disabled { cursor: default; } #kavita-screen-page-indicator:focus-visible { outline: 2px solid #fff; outline-offset: 2px; } #kavita-screen-page-indicator[hidden] { display: none !important; } #kavita-page-jump-message { position: fixed; bottom: 70px; right: 12px; max-width: 85vw; z-index: 1100; padding: 8px 12px; border-radius: 6px; color: #fff; background: #8b2525; font: 13px/1.5 system-ui,sans-serif; }';
+  style.textContent += `
+    #kavita-screen-page-indicator.in-native-footer {position:static;left:auto;transform:none;bottom:auto!important;z-index:auto;font:inherit;color:inherit;background:transparent;padding:0 4px;border-radius:3px}
+    [data-kavita-native-page-label] {display:none!important}
+    [data-kavita-native-completion] {font-size:0!important}
+    [data-kavita-native-completion] .dot-separator {display:none!important}
+    [data-kavita-native-completion] .time-left {font-size:12px}
+    #kavita-reading-summary {position:fixed;right:calc(12px + env(safe-area-inset-right,0px));bottom:calc(5px + env(safe-area-inset-bottom,0px));z-index:1031;max-width:min(340px,calc(50vw - 70px));padding:1px 7px;border-radius:8px;font:11px/1.4 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+    #kavita-reading-summary[hidden] {display:none!important}
+  `;
+  document.head.appendChild(style); document.body.append(label,summary);
+  function summaryKey() {
+    try {const u=JSON.parse(localStorage.getItem('kavita-user')||'null');return 'kavita-reading-summary-v1:'+encodeURIComponent(u?.id??u?.username??'guest');}
+    catch {return 'kavita-reading-summary-v1:guest';}
+  }
+  function summaryEnabled() {
+    const key=summaryKey();if(summaryPreferences.has(key))return summaryPreferences.get(key);
+    try {return localStorage.getItem(key)!=='false';}catch{return true;}
+  }
+  function summarySettings() {
+    for(const settings of document.querySelectorAll('app-epub-setting-drawer app-reader-settings')) {
+      const row=settings.querySelector('#fontsize')?.closest('.controls');if(!row)continue;
+      let control=settings.querySelector('[data-kavita-reading-summary]');
+      if(!control) {
+        const holder=document.createElement('div');holder.className='controls my-3';
+        holder.innerHTML='<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-reading-summary><span class="form-check-label">목차·진행률 표시</span></label><small class="d-block text-muted">우측 하단에 현재 목차 제목과 전체 화면 페이지 기준 진행률을 표시합니다. 설정은 이 브라우저에 저장됩니다.</small>';
+        row.after(holder);control=holder.querySelector('input');
+        control.addEventListener('change',()=>{const key=summaryKey();summaryPreferences.set(key,control.checked);try{localStorage.setItem(key,String(control.checked));}catch{}update();});
+      }
+      control.checked=summaryEnabled();
+    }
+  }
+  function placePageLabel(root,enabled) {
+    const link=root?.querySelector('.bottom-bar a.btn-link');
+    // Keep Angular's original link (and event handler) for the jump dialog.
+    const original=link?.closest('span')||link;
+    if(enabled&&original) {
+      original.setAttribute('data-kavita-native-page-label','');
+      const completion=original.nextElementSibling;
+      if(completion?.matches('.d-none.d-sm-block'))completion.setAttribute('data-kavita-native-completion','');
+      if(label.previousElementSibling!==original)original.after(label);
+      label.classList.add('in-native-footer');
+    } else {
+      if(label.parentElement!==document.body)document.body.append(label);
+      label.classList.remove('in-native-footer');
+      root?.querySelectorAll('[data-kavita-native-page-label],[data-kavita-native-completion]').forEach(n=>{n.removeAttribute('data-kavita-native-page-label');n.removeAttribute('data-kavita-native-completion');});
+    }
+  }
+  function tocTitle(g) {
+    const entries=tablesOfContents.get(book?.id)||[];
+    const view=g.content.getBoundingClientRect();
+    let title='',onCurrentPage=false;
+    for(const item of entries) {
+      if(item.page>book.index)continue;
+      if(item.page<book.index){title=item.title;continue;}
+      const part=String(item.part||'').split('#').at(-1).split('/')[0];
+      let anchor;try{anchor=part&&g.content.querySelector('#'+CSS.escape(decodeURIComponent(part)));}catch{}
+      if(!part||!anchor){if(!onCurrentPage)title=item.title;onCurrentPage=true;continue;}
+      const rect=anchor.getBoundingClientRect();
+      if((g.vertical?rect.top-view.top:rect.left-view.left)<=g.size/2){title=item.title;onCurrentPage=true;}
+    }
+    return title||g.content.querySelector('h1,h2,h3')?.textContent.trim()||'목차 없음';
+  }
+  function updateSummary(g,percent) {
+    summary.hidden=!summaryEnabled()||label.hidden;
+    if(summary.hidden)return;
+    const text=`${tocTitle(g)} · ${percent===null?'계산 중':percent+'%'}`;
+    if(summary.textContent!==text)summary.textContent=text;
+    summary.title=text;summary.setAttribute('aria-label',text);
+  }
+
   const visible = el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden';
   let pageJump = null;
   const jumpDelay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -714,7 +788,7 @@
         return {id: u.searchParams.get('chapterId'), type: 'chapter'};
       if (u.pathname === '/api/reader/get-progress' && /^\d+$/.test(u.searchParams.get('chapterId') || ''))
         return {id:u.searchParams.get('chapterId'),type:'progress',epoch:navigationEpoch};
-      const m = u.pathname.match(/^\/api\/book\/(\d+)\/(book-page|book-info)$/);
+      const m = u.pathname.match(/^\/api\/book\/(\d+)\/(book-page|book-info|chapters)$/);
       if (!m) return null;
       const index = Number(u.searchParams.get('page'));
       if (m[2] === 'book-page' && (!Number.isInteger(index) || index < 0)) return null;
@@ -723,6 +797,10 @@
   }
   function observe(info, text, headers) {
     if (!info) return;
+    if(info.type==='chapters') {
+      try {const flat=[];const visit=items=>{for(const item of items||[]){if(Number.isInteger(item.page)&&typeof item.title==='string'&&item.title.trim())flat.push({page:item.page,title:item.title.trim(),part:item.part});visit(item.children);}};visit(JSON.parse(text));tablesOfContents.set(info.id,flat.sort((a,b)=>a.page-b.page));}catch{}
+      return;
+    }
     if (info.type==='progress') {
       try {
         const data=JSON.parse(text);
@@ -843,12 +921,12 @@
     return {content, size, vertical, total, current:Math.min(total,Math.max(1,Math.round((offset + size) / size)))};
   }
   function position(root) {
-    label.style.bottom = 'calc(5px + env(safe-area-inset-bottom, 0px))';
+    summary.style.bottom = 'calc(5px + env(safe-area-inset-bottom, 0px))';
     const bar = root.querySelector('.bottom-bar');
     if (bar && visible(bar)) {
       const rect = bar.getBoundingClientRect();
       // Above the whole action bar: cannot collide with Page~ text or arrows.
-      if(rect.bottom>0&&rect.top<innerHeight)label.style.bottom = `${Math.max(5,innerHeight - rect.top + 5)}px`;
+      if(rect.bottom>0&&rect.top<innerHeight)summary.style.bottom = `${Math.max(5,innerHeight - rect.top + 5)}px`;
     }
   }
   async function read(path, owner, signal) {
@@ -1010,7 +1088,10 @@
   }
   function update() {
     label.disabled = true;
+    summary.hidden=true;summarySettings();
     const root=document.querySelector('app-book-reader');
+    const paginated=!!root?.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2');
+    placePageLabel(root,paginated);
     if(!root) {label.hidden=true;resume=null;cancelCalculation();if(book){book=null;signature='';counts=[];generation++;}return;}
     const popup=[...document.querySelectorAll('[role="dialog"],.offcanvas.show,.popover,app-highlight-bar')].some(visible);
     if(popup||!root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2')) {label.hidden=true;return;}
@@ -1022,7 +1103,7 @@
     if(document.fonts.status!=='loaded'||[...g.content.querySelectorAll('img')].some(img=>!img.complete))return;
     restoreScreen(root,g);
     position(root);label.hidden=false;
-    if(!book){label.textContent='…';label.title='책 전체 페이지 계산 준비 중';return;}
+    if(!book){label.textContent='계산 중';label.title='책 전체 페이지 계산 준비 중';updateSummary(g,null);return;}
     const css=getComputedStyle(g.content);
     const key=calculationKey(root,g);
     const length=sections.get(book.id);
@@ -1039,11 +1120,12 @@
       label.title='현재 화면 설정으로 계산한 책 전체 페이지. 눌러서 원하는 페이지로 이동';
       label.setAttribute('aria-label',`${label.textContent} 페이지. 원하는 페이지로 이동`);
       label.disabled = !!pageJump;
+      updateSummary(g,Math.min(100,Math.floor((before+g.current)*100/total)));
       if (label.dataset.cacheSaved !== hash(key + JSON.stringify(counts))) {
         saveCounts(key, book); label.dataset.cacheSaved = hash(key + JSON.stringify(counts));
       }
     } else {
-      label.textContent=failed?'—':'…';label.title=failed?'책 전체 페이지 계산 실패. 새로고침 후 다시 시도하세요.':'책 전체 페이지 계산 중';
+      label.textContent=failed?'—':'계산 중';updateSummary(g,null);label.title=failed?'책 전체 페이지 계산 실패. 새로고침 후 다시 시도하세요.':'책 전체 페이지 계산 중';
     }
     if(!complete&&!failed&&!running)void calculate(root,book,key,generation);
   }

@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');
 const {readFileSync}=require('node:fs');
 const assert=require('node:assert/strict');
-const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p>Paragraph ${i}. ${'Screen pagination fixture text. '.repeat(16)}</p>`).join('')}</div>`);
+const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p id="p${i}">Paragraph ${i}. ${'Screen pagination fixture text. '.repeat(16)}</p>`).join('')}</div>`);
 (async()=>{
  const browser=await chromium.launch({headless:true});
  try{
@@ -11,13 +11,14 @@ const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p>Paragr
    const request=route.request(),url=new URL(request.url());requests.push({path:url.pathname,method:request.method()});
    if(url.pathname==='/api/reader/progress'){saves.push(JSON.parse(request.postData()));return route.fulfill({json:true})}
    if(url.pathname==='/api/series/chapter')return route.fulfill({json:{id:1,pages:3,createdUtc:'2026-01-01',wordCount:1000,files:[{id:1,bytes:100,pages:3}]}});
+   if(url.pathname.endsWith('/chapters'))return route.fulfill({json:[{title:'첫 목차',page:0,part:'p0',children:[{title:'중간 목차',page:0,part:'p5',children:[]}]},{title:'다음 목차',page:1,part:'',children:[]},{title:'마지막 목차',page:2,part:'p0',children:[]}]});
    if(url.pathname.endsWith('/book-page')){if(slow)await new Promise(resolve=>setTimeout(resolve,250));return route.fulfill({contentType:'text/html',body:sections[Number(url.searchParams.get('page'))]})}
    return route.fulfill({contentType:'text/html',body:`<style>
     body{margin:0}.reader-container{width:100vw}.book-content{height:360px;column-count:1;column-gap:20px;overflow:hidden;font:16px/24px sans-serif}p{margin:0 0 12px}
     .bottom-bar{position:fixed;bottom:0;width:100%;height:40px}ngb-modal-window{position:fixed;inset:100px;background:white;z-index:1055}ngb-modal-window input{display:block}
    </style><app-book-reader><div class="reader-container"><div class="reading-section column-layout-1"><div class="book-container immersive"><div class="book-content column-layout-1" style="max-height:360px"></div></div></div></div></app-book-reader>`});
   });
-  await page.goto('http://fixture.test/');await page.addScriptTag({content:readFileSync('proxy/swipe.js','utf8')});
+  await page.goto('http://fixture.test/');await page.evaluate(()=>localStorage.setItem('kavita-user',JSON.stringify({id:11,username:'fixture'})));await page.addScriptTag({content:readFileSync('proxy/swipe.js','utf8')});
   await page.evaluate(()=>{
    const root=document.querySelector('app-book-reader'),content=root.querySelector('.book-content'),section=root.querySelector('.reading-section');window.index=0;window.nativeJumps=[];window.menuToggles=0;
    window.navigate=async index=>{
@@ -28,7 +29,7 @@ const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p>Paragr
    window.openMenu=()=>{
     if(root.querySelector('.reader-header'))return;
     const header=document.createElement('div');header.className='reader-header';root.append(header);
-    const bar=document.createElement('div');bar.className='bottom-bar';bar.innerHTML='<button><i class="fa-angle-left"></i></button><a class="btn-link" href="javascript:void(0)">Page</a><button><i class="next-page-highlight"></i></button>';root.append(bar);
+    const bar=document.createElement('div');bar.className='bottom-bar';bar.innerHTML='<button><i class="fa-angle-left"></i></button><div class="d-flex mt-2 justify-content-center"><span class="me-1"><a class="btn-link" href="javascript:void(0)">Page 1</a> / 3</span><div class="d-none d-sm-block">0%<span class="time-left">10 min</span></div></div><button><i class="next-page-highlight"></i></button>';root.append(bar);
     bar.querySelector('a').onclick=()=>{
      const modal=document.createElement('ngb-modal-window');modal.setAttribute('role','dialog');modal.innerHTML='<app-confirm-dialog class="confirm-prompt"><div class="modal-header"><h4 class="modal-title">Native page</h4><button type="button">Close</button></div><div class="modal-body"><form><div>Native section count: 3</div><input type="text" formcontrolname="prompt"></form></div><div class="modal-footer"><button type="button" class="btn-secondary">Cancel</button><button type="button" class="btn-primary">OK</button></div></app-confirm-dialog>';
      document.body.classList.add('modal-open');document.body.append(modal);let value='';modal.querySelector('input').addEventListener('input',event=>value=event.target.value);
@@ -45,15 +46,34 @@ const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p>Paragr
   let total=counts.reduce((a,b)=>a+b,0);const label=page.locator('#kavita-screen-page-indicator'),input=page.locator('ngb-modal-window input'),confirm=page.locator('ngb-modal-window .btn-primary');
   await page.evaluate(()=>navigate(0));await page.waitForFunction(total=>document.querySelector('#kavita-screen-page-indicator').textContent===`1 / ${total}`&&!document.querySelector('#kavita-screen-page-indicator').disabled,total);
   assert.ok(counts.every(count=>count>=3));
+  await page.evaluate(()=>fetch('/api/book/1/chapters',{headers:{Authorization:'Bearer fixture-only'}}));
+  const summary=page.locator('#kavita-reading-summary');
+  await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').textContent.startsWith('첫 목차 · '));
+  assert.equal(await label.evaluate(n=>!!n.closest('.bottom-bar')),true,'screen counter replaces the native footer position');
+  assert.equal(await page.locator('.bottom-bar a.btn-link').isVisible(),false,'original section counter is hidden');
+  assert.equal(await page.locator('.time-left').isVisible(),true,'existing time-left remains available');
+  assert.equal(await summary.textContent(),`첫 목차 · ${Math.floor(100/total)}%`);
+  async function summarySettings(enabled){
+    await page.evaluate(()=>{const drawer=document.createElement('app-epub-setting-drawer');drawer.innerHTML='<app-reader-settings><div class="controls"><input id="fontsize"></div></app-reader-settings>';document.body.append(drawer);});
+    const control=page.locator('[data-kavita-reading-summary]');await control.waitFor();await control.setChecked(enabled);
+    assert.equal(await control.count(),1);await page.locator('app-epub-setting-drawer').evaluate(n=>n.remove());
+  }
+  await summarySettings(false);await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').hidden);
+  assert.equal(await label.isVisible(),true,'option hides only title/progress, keeping page navigation');
+  assert.equal(await page.evaluate(()=>localStorage.getItem('kavita-reading-summary-v1:11')),'false');
+  await page.evaluate(()=>localStorage.setItem('kavita-user',JSON.stringify({id:12,username:'other'})));await summary.waitFor();
+  await page.evaluate(()=>localStorage.setItem('kavita-user',JSON.stringify({id:11,username:'fixture'})));await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').hidden);
+  await summarySettings(true);await summary.waitFor();
+
   async function open(touch=false){if(touch)await label.tap();else await label.click();await input.waitFor();assert.equal(await page.locator('.modal-title').textContent(),'전체 페이지로 이동');assert.equal(await input.getAttribute('max'),String(total))}
   async function jump(number,keyboard=false){await open();await input.fill(String(number));if(keyboard)await input.press('Enter');else await confirm.click();await page.waitForFunction(({number,total})=>document.querySelector('#kavita-screen-page-indicator').textContent===`${number} / ${total}`&&!document.querySelector('#kavita-screen-page-indicator').disabled,{number,total})}
   await open(true);assert.equal(await input.inputValue(),'1');
   for(const value of ['0',String(total+1),'1.5']){await input.fill(value);await confirm.click();assert.equal(await page.locator('ngb-modal-window').count(),1);assert.ok(await page.locator('#kavita-page-jump-validation').textContent());assert.deepEqual(await page.evaluate(()=>nativeJumps),[])}
   await page.locator('ngb-modal-window .btn-secondary').click();await page.waitForTimeout(150);assert.equal(await label.textContent(),`1 / ${total}`);
-  await jump(3,true);assert.equal(await page.evaluate(()=>index),0,'same-section jump needs no section load');assert.equal(await page.locator('.book-content').evaluate(el=>Math.round(el.scrollLeft/820)),2);
-  slow=true;const target=counts[0]+3;await jump(target);assert.equal(await page.evaluate(()=>index),1);assert.equal(await page.locator('.book-content').evaluate(el=>Math.round(el.scrollLeft/820)),2);
+  await jump(3,true);assert.match(await summary.textContent(),/^중간 목차 · /);assert.equal(await page.evaluate(()=>index),0,'same-section jump needs no section load');assert.equal(await page.locator('.book-content').evaluate(el=>Math.round(el.scrollLeft/820)),2);
+  slow=true;const target=counts[0]+3;await jump(target);assert.equal(await page.evaluate(()=>index),1);assert.equal(await page.locator('.book-content').evaluate(el=>Math.round(el.scrollLeft/820)),2);assert.equal(await summary.textContent(),`다음 목차 · ${Math.floor(target*100/total)}%`);
   await page.waitForTimeout(300);assert.ok(saves.some(save=>save.pageNum===1&&save.bookScrollId.includes(':2.000000')),'native progress receives exact selected screen');
-  await jump(total);assert.equal(await page.evaluate(()=>index),2);await jump(1);assert.equal(await page.evaluate(()=>index),0);
+  await jump(total);await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').textContent==='마지막 목차 · 100%');assert.equal(await page.evaluate(()=>index),2);await jump(1);assert.equal(await page.evaluate(()=>index),0);
   await page.evaluate(()=>closeMenu());await jump(target);assert.equal(await page.locator('.reader-header').count(),0,'immersive menu hidden after jump');
   await open();await page.locator('ngb-modal-window .modal-header button').click();await page.waitForTimeout(150);assert.equal(await page.locator('ngb-modal-window').count(),0);assert.equal(await page.locator('.reader-header').count(),0,'cancel restores immersive menu');
   await open();const jumpCount=await page.evaluate(()=>nativeJumps.length);await page.setViewportSize({width:900,height:600});await input.fill('1');await confirm.click();assert.equal(await page.locator('ngb-modal-window').count(),1);assert.equal(await page.evaluate(()=>nativeJumps.length),jumpCount);assert.match(await page.locator('#kavita-page-jump-validation').textContent(),/설정이 변경/);await input.press('Escape');

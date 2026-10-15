@@ -56,6 +56,9 @@ const server=http.createServer((req,res)=>{
   await page.waitForSelector('app-view-annotations-drawer',{timeout:15000});
   await page.locator('.offcanvas-header button').last().click();await page.waitForSelector('app-view-annotations-drawer',{state:'hidden'});
   try{await page.waitForFunction(()=>/^\d+ \/ \d+$/.test(document.getElementById('kavita-screen-page-indicator')?.textContent||'')||document.getElementById('kavita-screen-page-indicator')?.textContent==='—',{},{timeout:45000});if(await page.locator('#kavita-screen-page-indicator').textContent()==='—')throw new Error('Page calculation failed');}catch(error){console.log('Counter state:',await page.evaluate(()=>({text:document.getElementById('kavita-screen-page-indicator')?.textContent,title:document.getElementById('kavita-screen-page-indicator')?.title,section:document.querySelector('.reading-section')?.className,pending:window.__kavitaNativePending,error:window.__kavitaPageCalculationError})));throw error;}
+  assert.equal(await page.locator('#kavita-screen-page-indicator').evaluate(n=>!!n.closest('.bottom-bar')),true,'computed pages replace native footer');
+  assert.equal(await page.locator('.bottom-bar a.btn-link').isVisible(),false,'native section count is hidden');
+  assert.match(await page.locator('#kavita-reading-summary').textContent(),/ · \d+%$/,'TOC title and computed progress are shown offline');
   const original=await page.locator('.book-content').innerText();
   await page.evaluate(()=>window.__kavitaTurnPage(document.querySelector('app-book-reader'),1,'test'));
   await page.waitForTimeout(1200);
