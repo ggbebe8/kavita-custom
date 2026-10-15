@@ -1,3 +1,5 @@
+서버 TTS를 포함한 새 설치·재배포·롤백 안내는 [SERVER-TTS.md](SERVER-TTS.md)를 참고하세요. 기존 기능과 브라우저 TTS도 유지됩니다.
+
 # 터치스크린 EPUB swipe
 
 ## PWA 앱 설치

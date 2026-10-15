@@ -1,3 +1,5 @@
+서버 TTS를 포함한 새 설치·재배포·롤백 안내는 [SERVER-TTS.md](SERVER-TTS.md)를 참고하세요. 기존 기능과 브라우저 TTS도 유지됩니다.
+
 # Kavita 재설치 매뉴얼
 
 > 수정한 기능만 다른 서버에 적용하려면 [기능 전용 설치 안내](PORTABLE-FEATURES.md)를 사용한다. 이 문서의 reinstall 패키지는 계정·책·DB까지 복원하는 데이터 백업용이다.
@@ -206,8 +208,8 @@ PY_CONFIG
 
 ```bash
 docker compose -p kavita -f compose.swipe.yaml config --quiet
-docker compose -p kavita -f compose.swipe.yaml pull
-docker compose -p kavita -f compose.swipe.yaml up -d
+docker compose -p kavita -f compose.swipe.yaml pull --ignore-buildable
+docker compose -p kavita -f compose.swipe.yaml up -d --build
 ```
 
 D:에 config가 이미 남아 있으면 백업보다 최신 데이터일 수 있다. 먼저 기존 config를 외부에 백업하고 어느 DB를 사용할지 확인한 뒤 진행한다. 이 경우 위 복사 블록을 강제로 실행하지 않는다. Compose의 마운트는 다음 형태가 되어야 한다.
@@ -300,8 +302,8 @@ WSL과 Docker를 시작하고 프로세스를 유지하는 예시다. 일정 시
 ```bash
 cd ~/docker/kavita
 docker compose -p kavita -f compose.swipe.yaml config --quiet
-docker compose -p kavita -f compose.swipe.yaml pull
-docker compose -p kavita -f compose.swipe.yaml up -d
+docker compose -p kavita -f compose.swipe.yaml pull --ignore-buildable
+docker compose -p kavita -f compose.swipe.yaml up -d --build
 ```
 
 파일을 복원한 뒤 실행 실패한 경우, 프로젝트가 이미 있으므로 복원 스크립트를 다시 실행하는 대신 위 Compose 명령을 사용한다. 진단 명령:

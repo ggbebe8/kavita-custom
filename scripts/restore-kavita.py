@@ -104,8 +104,8 @@ def main():
         print('Files restored; Docker was not changed.')
         return
     run('docker', 'compose', '-p', 'kavita', '-f', 'compose.swipe.yaml', 'config', '--quiet', cwd=project)
-    run('docker', 'compose', '-p', 'kavita', '-f', 'compose.swipe.yaml', 'pull', cwd=project)
-    run('docker', 'compose', '-p', 'kavita', '-f', 'compose.swipe.yaml', 'up', '-d', cwd=project)
+    run('docker', 'compose', '-p', 'kavita', '-f', 'compose.swipe.yaml', 'pull', '--ignore-buildable', cwd=project)
+    run('docker', 'compose', '-p', 'kavita', '-f', 'compose.swipe.yaml', 'up', '-d', '--build', cwd=project)
     run('docker', 'compose', '-p', 'kavita', '-f', 'compose.swipe.yaml', 'ps', cwd=project)
     print('Kavita restored on port 5000. Allow startup to finish, then open the existing URL.')
 

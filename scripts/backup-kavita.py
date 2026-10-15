@@ -48,11 +48,11 @@ def main():
                 if name == 'compose.yaml':
                     content = content.replace('ghcr.io/kareadita/kavita:latest', inspect['Config']['Image'])
                 add_bytes('project/' + name, content.encode())
-            for folder in ['proxy', 'scripts', 'tests']:
+            for folder in ['proxy', 'scripts', 'tests', 'tts']:
                 for path in (root / folder).rglob('*'):
                     if path.is_file() and '__pycache__' not in path.parts:
                         add_bytes('project/' + str(path.relative_to(root)), path.read_bytes())
-            for name in ['README.swipe.md', 'REINSTALL.md', 'OFFLINE.md']:
+            for name in ['README.swipe.md', 'REINSTALL.md', 'OFFLINE.md', 'SERVER-TTS.md']:
                 add_bytes('project/' + name, (root / name).read_bytes())
             print('Packing config and books without stopping the service...', flush=True)
             for source, prefix in [(config, 'project/config'), (books, 'books')]:

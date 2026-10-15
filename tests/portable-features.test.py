@@ -22,6 +22,12 @@ with tempfile.TemporaryDirectory(prefix='kavita-portable-test-') as tmp:
     assert any(v['source'] in [str(books),str(books).replace('$','$$')] and v['target']=='/books' for v in mounts)
     assert any(v['source']==str(config) and v['target']=='/kavita/config' for v in mounts)
     assert rendered['services']['swipe-proxy']['ports'][0]['published']=='15800'
+    assert 'tts' in rendered['services'] and 'ports' not in rendered['services']['tts']
+    assert int(rendered['services']['tts']['mem_limit'])==1073741824
+    assert (target/'tts/server.py').read_bytes()==(root/'tts/server.py').read_bytes()
+    assert (target/'SERVER-TTS.md').is_file()
+    no_tts=json.loads(subprocess.check_output(['docker','compose','-f',str(target/'compose.no-tts.yaml'),'config','--format','json']))
+    assert 'tts' not in no_tts['services'] and 'swipe-proxy' in no_tts['services']
     assert all('container_name' not in service for service in rendered['services'].values())
     assert (target/'proxy/swipe.js').read_bytes()==(root/'proxy/swipe.js').read_bytes()
     assert json.loads((target/'proxy/pwa/manifest.webmanifest').read_text())['display']=='standalone'
@@ -58,6 +64,15 @@ with tempfile.TemporaryDirectory(prefix='kavita-portable-test-') as tmp:
     missing=tmp/'missing-target'
     result=subprocess.run(['python3',str(tmp/'portable-features/install.py'),'--target',str(missing),'--books-dir',str(tmp/'nonexistent')],capture_output=True,text=True)
     assert result.returncode!=0 and not missing.exists()
+    https_target=tmp/'https-target'
+    subprocess.run(['python3',str(tmp/'portable-features/install.py'),'--target',str(https_target),'--https-domain','books.example.com','--without-tts'],check=True)
+    https=json.loads(subprocess.check_output(['docker','compose','-f',str(https_target/'compose.yaml'),'config','--format','json']))
+    assert 'caddy' in https['services'] and 'tts' not in https['services']
+    assert {p['published'] for p in https['services']['caddy']['ports']}=={'80','443'}
+    assert (https_target/'proxy/Caddyfile').read_text()=='books.example.com {\n    reverse_proxy swipe-proxy:80\n}\n'
+    invalid=tmp/'invalid-domain'
+    result=subprocess.run(['python3',str(tmp/'portable-features/install.py'),'--target',str(invalid),'--https-domain','bad;hostname'],capture_output=True,text=True)
+    assert result.returncode!=0 and not invalid.exists()
     (tmp/'portable-features/proxy/swipe.js').write_text('corrupted')
     corrupt_command=command.copy();corrupt_command[corrupt_command.index('--target')+1]=str(tmp/'other')
     result=subprocess.run(corrupt_command,capture_output=True,text=True)

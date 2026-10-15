@@ -1216,7 +1216,7 @@
   window.setInterval(update,300);update();
 })();
 
-// Device/browser speech synthesis. No Kavita-side TTS server or audio cache.
+// Browser speech synthesis with an optional authenticated server audio engine.
 (() => {
   'use strict';
   if(window.__kavitaTtsInstalled)return;
@@ -1224,6 +1224,10 @@
   const synth=window.speechSynthesis;
   if(!synth||typeof window.SpeechSynthesisUtterance!=='function')return;
   let session=null,token=0,utterance=null,panel=null,status=null,voiceSelect=null,rateInput=null;
+  let serverTts=null,serverRoot=null,sourceSelect=null,serverVoice=null,serverLanguage=null;
+  let serverModule=null;
+  const loadServer=()=>serverModule||(serverModule=import('/kavita-pwa/server-tts.js'));
+  const serverSelected=()=>sourceSelect?.value==='server';
   const pref='kavita-browser-tts-v1';
   const highlightName='kavita-tts-current';
   const style=document.createElement('style');
@@ -1411,13 +1415,34 @@
     panel.style.cssText='max-width:min(430px,90vw);border:0;border-radius:12px;padding:20px;color:#222;background:#fff;box-shadow:0 8px 40px #0008';
     const title=document.createElement('h3');title.textContent='본문 읽어주기';panel.append(title);
     const explanation=document.createElement('p');explanation.textContent='읽는 위치에 맞춰 페이지를 넘기며 다음 장도 이어 읽습니다. 화면을 끄면 중단될 수 있으며, 선택한 음성에 따라 인터넷 연결이 필요할 수 있습니다.';panel.append(explanation);
+    const ownerPanel=panel;
+    sourceSelect=document.createElement('select');sourceSelect.setAttribute('aria-label','읽기 방식');
+    sourceSelect.add(new Option('브라우저 음성','browser'));panel.append(sourceSelect);
     voiceSelect=document.createElement('select');voiceSelect.setAttribute('aria-label','읽기 음성');panel.append(voiceSelect);voices();
+    serverVoice=document.createElement('select');serverVoice.setAttribute('aria-label','서버 읽기 음성');serverVoice.hidden=true;
+    serverVoice.add(new Option('빠른 한국어 음성 · 기본','10'));
+    for(let i=0;i<10;i++)serverVoice.add(new Option('서버 음성 '+(i+1),String(i)));panel.append(serverVoice);
+    serverLanguage=document.createElement('select');serverLanguage.setAttribute('aria-label','서버 읽기 언어');serverLanguage.hidden=true;
+    for(const [value,name] of [['ko','한국어'],['en','영어'],['ja','일본어']])serverLanguage.add(new Option(name,value));panel.append(serverLanguage);
+    try{const saved=JSON.parse(localStorage.getItem('kavita-server-tts-v1'));if(saved&&['ko','en','ja'].includes(saved.language)&&Number.isInteger(Number(saved.voice))&&Number(saved.voice)>=0&&Number(saved.voice)<=10){serverLanguage.value=saved.language;serverVoice.value=saved.voice;}}catch{}
+    const saveServerVoice=()=>{serverVoice.options[0].disabled=serverLanguage.value!=='ko';if(serverVoice.value==='10'&&serverLanguage.value!=='ko')serverVoice.value='0';try{localStorage.setItem('kavita-server-tts-v1',JSON.stringify({voice:serverVoice.value,language:serverLanguage.value}));}catch{}};
+    saveServerVoice();serverLanguage.addEventListener('change',saveServerVoice);serverVoice.addEventListener('change',saveServerVoice);
+    const updateSource=()=>{const selected=serverSelected();voiceSelect.hidden=selected;serverVoice.hidden=!selected;serverLanguage.hidden=!selected;explanation.textContent=selected?'서버에서 음성을 만들어 연속 재생합니다. 화면을 꺼도 재생하도록 구성했으며 실제 지속 여부는 기기에서 확인하세요. 서버 연결이 필요합니다.':'기기·브라우저 음성으로 읽습니다. 화면을 끄면 중단될 수 있습니다.';try{localStorage.setItem('kavita-tts-source',sourceSelect.value);}catch{}};
+    sourceSelect.addEventListener('change',()=>{if(session)stop();serverTts?.stop();updateSource();});
+    void loadServer().then(async module=>{
+      if(new URLSearchParams(location.search).get('kv-offline')==='1')return;
+      if(!await module.available()||panel!==ownerPanel)return;
+      if(serverRoot!==root){serverTts?.stop();serverTts=module.create({root,announce,startText:()=>readingText(root.querySelector('.book-content')).text,stopBrowser:()=>stop()});serverRoot=root;}
+      sourceSelect.add(new Option('서버 음성 · 백그라운드 재생','server'));
+      let preferred;try{preferred=localStorage.getItem('kavita-tts-source');}catch{}
+      sourceSelect.value=serverTts.active||(!session&&preferred!=='browser')?'server':'browser';updateSource();
+    }).catch(()=>{});
     rateInput=document.createElement('input');rateInput.type='range';rateInput.min='.5';rateInput.max='2';rateInput.step='.1';rateInput.value=settings.rate;rateInput.setAttribute('aria-label','읽기 속도');
     const rateLabel=document.createElement('label');rateLabel.textContent=`속도 ${settings.rate}배 `;rateLabel.append(rateInput);panel.append(rateLabel);
     const save=()=>{settings={rate:Number(rateInput.value),voice:voiceSelect.value};rateLabel.firstChild.textContent=`속도 ${settings.rate}배 `;try{localStorage.setItem(pref,JSON.stringify(settings));}catch{}};
-    rateInput.addEventListener('input',save);voiceSelect.addEventListener('change',save);
+    rateInput.addEventListener('input',()=>{save();if(serverTts?.active)serverTts.setRate(Number(rateInput.value));});voiceSelect.addEventListener('change',save);
     status=document.createElement('p');status.setAttribute('aria-live','polite');status.textContent=session?(synth.paused?'일시정지 중':'읽는 중'):'음성·속도 변경은 다음 읽기 구간부터 적용됩니다.';panel.append(status);
-    for(const [label,action] of [['재생',()=>{if(session){userPaused=false;synth.resume();if(!utterance&&!session.advancing)void speakNext(token);announce('읽는 중');}else start(root);}],['일시정지',()=>{if(session){userPaused=true;synth.pause();announce('일시정지 중');}}],['정지',()=>stop()],['닫기',()=>panel.close()]]){
+    for(const [label,action] of [['재생',()=>{if(serverSelected()){if(serverTts?.active)void serverTts.resume();else void serverTts?.start({voice:Number(serverVoice.value),rate:Number(rateInput.value),language:serverLanguage.value});return;}if(session){userPaused=false;synth.resume();if(!utterance&&!session.advancing)void speakNext(token);announce('읽는 중');}else start(root);}],['일시정지',()=>{if(serverSelected()){serverTts?.pause();return;}if(session){userPaused=true;synth.pause();announce('일시정지 중');}}],['정지',()=>{if(serverTts?.active)serverTts.stop();else stop();}],['닫기',()=>panel.close()]]){
       const button=document.createElement('button');button.type='button';button.textContent=label;button.style.cssText='margin:6px;padding:8px';button.addEventListener('click',action);panel.append(button);
     }
     (document.fullscreenElement||document.body).append(panel);panel.showModal();

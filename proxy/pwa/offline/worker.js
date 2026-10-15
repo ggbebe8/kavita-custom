@@ -1,8 +1,8 @@
 /* Public application code only is HTTP-cached. Authenticated book data stays
    in account-scoped IndexedDB and is supplied by the requesting reader client. */
-const VERSION='kavita-offline-shell-d57adf966edcb755';
+const VERSION='kavita-offline-shell-14a0829aed6131ff';
 const ROOT='/kavita-pwa/offline/';
-const FILES=['index.html','offline.css','app.js','store.js','download.js','sync.js','bridge.js','native.js','native-bootstrap.js'].map(name=>ROOT+name);
+const FILES=['index.html','offline.css','app.js','store.js','download.js','sync.js','bridge.js','native.js','native-bootstrap.js'].map(name=>ROOT+name).concat('/kavita-pwa/server-tts.js');
 self.addEventListener('install',event=>event.waitUntil((async()=>{
   const cache=await caches.open(VERSION);
   for(const url of FILES){const response=await fetch(url,{cache:'reload'});if(!response.ok)throw new Error('Offline shell download failed');await cache.put(url,response);}

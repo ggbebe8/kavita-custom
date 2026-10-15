@@ -9,7 +9,7 @@ const {chromium}=require('playwright');const {readFileSync}=require('node:fs');c
  });
  await page.route('http://tts.test/**',route=>route.fulfill({contentType:'text/html; charset=utf-8',body:'<style>.book-content{height:300px;width:400px;overflow:hidden}</style><app-book-reader><div class="reader-header"><button><i class="fa-clipboard-question"></i></button></div><div class="book-content"><style>.test{color:red}</style><p>안녕하세요. 본문 읽기 테스트입니다. '+('다음 문장을 계속 읽습니다. '.repeat(50))+'</p><button>읽으면 안 되는 버튼</button></div></app-book-reader>'}));
  await page.goto('http://tts.test/');await page.addScriptTag({content:readFileSync('proxy/swipe.js','utf8')});
- await page.locator('[data-kavita-tts]').click();await page.getByRole('slider',{name:'읽기 속도'}).fill('1.4');await page.getByRole('combobox').selectOption('ko');
+ await page.locator('[data-kavita-tts]').click();await page.getByRole('slider',{name:'읽기 속도'}).fill('1.4');await page.getByRole('combobox',{name:'읽기 음성',exact:true}).selectOption('ko');
  await page.getByRole('button',{name:'재생',exact:true}).click();
  let calls=await page.evaluate(()=>ttsCalls.filter(c=>typeof c==='object'));assert.equal(calls.length,1);assert.equal(calls[0].rate,1.4);assert.equal(calls[0].lang,'ko-KR');assert.ok(!calls[0].text.includes('읽으면 안 되는 버튼'));
  await page.getByRole('button',{name:'일시정지',exact:true}).click();assert.equal(await page.evaluate(()=>speechSynthesis.paused),true);

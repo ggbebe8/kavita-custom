@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Configure the portable Kavita feature kit; never copy user data or start Docker."""
+"""Configure portable Kavita features; optionally build/start with --start."""
 import argparse
 import hashlib
 import json
 from pathlib import Path
 import shutil
+import subprocess
+import re
 
 
 def main():
@@ -14,6 +16,9 @@ def main():
     parser.add_argument('--target', type=Path, default=Path.home() / 'docker/kavita-custom')
     parser.add_argument('--port', type=int, default=5000)
     parser.add_argument('--bind', default='0.0.0.0', choices=['0.0.0.0', '127.0.0.1'])
+    parser.add_argument('--without-tts', action='store_true', help='Install existing features without server narration')
+    parser.add_argument('--https-domain', help='Optional public DNS hostname; adds Caddy on ports 80/443')
+    parser.add_argument('--start', action='store_true', help='Build and start the newly configured deployment')
     args = parser.parse_args()
     kit = Path(__file__).resolve().parent
     manifest = json.loads((kit / 'manifest.json').read_text())
@@ -28,6 +33,10 @@ def main():
     config = args.config_dir.resolve() if args.config_dir else target / 'config'
     if not 1 <= args.port <= 65535:
         raise ValueError('Port must be between 1 and 65535')
+    if args.https_domain and not re.fullmatch(r'(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}', args.https_domain):
+        raise ValueError('HTTPS domain must be a plain DNS hostname')
+    if args.https_domain and args.port in (80, 443):
+        raise ValueError('HTTP service port conflicts with Caddy ports')
     for path, explicit in [(books, args.books_dir), (config, args.config_dir)]:
         if explicit and not path.is_dir():
             raise ValueError('Data directory must already exist: ' + str(path))
@@ -52,27 +61,52 @@ def main():
                          './proxy/pwa:/usr/share/nginx/html/pwa:ro'],
              'depends_on': ['kavita'], 'restart': 'unless-stopped'}
     original = dict(kavita, ports=[binding + ':5000'])
+    services = {'kavita': kavita, 'swipe-proxy': proxy}
+    volumes = {}
+    if not args.without_tts:
+        services['tts'] = {'build': './tts', 'image': 'kavita-server-tts:supertonic3-v1',
+            'environment': {'KAVITA_URL': 'http://kavita:5000', 'TTS_THREADS': '2', 'TTS_CACHE_MB': '512'},
+            'volumes': ['tts-data:/data'], 'restart': 'unless-stopped', 'cpus': 2, 'mem_limit': '1g',
+            'security_opt': ['no-new-privileges:true'], 'cap_drop': ['ALL'],
+            'depends_on': ['kavita']}
+        volumes['tts-data'] = {}
+    if args.https_domain:
+        services['caddy'] = {'image': images['caddy'], 'ports': ['80:80', '443:443'],
+            'volumes': ['./proxy/Caddyfile:/etc/caddy/Caddyfile:ro', 'caddy-data:/data', 'caddy-config:/config'],
+            'depends_on': ['swipe-proxy'], 'restart': 'unless-stopped'}
+        volumes.update({'caddy-data': {}, 'caddy-config': {}})
     target.mkdir(parents=True)
     if args.books_dir is None:
         books.mkdir()
     if args.config_dir is None:
         config.mkdir(mode=0o700)
     shutil.copytree(kit / 'proxy', target / 'proxy')
+    shutil.copytree(kit / 'tts', target / 'tts')
+    if args.https_domain:
+        (target / 'proxy/Caddyfile').write_text(args.https_domain + ' {\n    reverse_proxy swipe-proxy:80\n}\n')
     shutil.copy2(kit / 'README.md', target / 'README.md')
     if (kit / 'OFFLINE.md').is_file():
         shutil.copy2(kit / 'OFFLINE.md', target / 'OFFLINE.md')
-    (target / 'compose.yaml').write_text(json.dumps({'services': {'kavita': kavita, 'swipe-proxy': proxy}}, indent=2) + '\n')
+    shutil.copy2(kit / 'SERVER-TTS.md', target / 'SERVER-TTS.md')
+    deployment = {'services': services}
+    if volumes:
+        deployment['volumes'] = volumes
+    (target / 'compose.yaml').write_text(json.dumps(deployment, indent=2) + '\n')
+    no_tts = dict(deployment, services={name: value for name, value in services.items() if name != 'tts'})
+    (target / 'compose.no-tts.yaml').write_text(json.dumps(no_tts, indent=2) + '\n')
     (target / 'compose.original.yaml').write_text(json.dumps({'services': {'kavita': original}}, indent=2) + '\n')
     print('Feature configuration created:', target)
-    print('User data was not copied or changed. Docker was not started.')
+    print('User data was not copied or changed.' + (' Starting Docker next.' if args.start else ' Docker was not started.'))
     print('Books directory:', books, '(register /books in Kavita web library settings)')
     print('Config directory:', config)
     print('Service port:', args.port)
-    print('Run in that directory: docker compose -p kavita-custom -f compose.yaml up -d')
+    print('Run in that directory: docker compose -p kavita-custom -f compose.yaml up -d --build')
+    if args.start:
+        subprocess.run(['docker', 'compose', '-p', 'kavita-custom', '-f', str(target / 'compose.yaml'), 'up', '-d', '--build'], cwd=target, check=True)
 
 
 if __name__ == '__main__':
     try:
         main()
-    except (ValueError, OSError) as error:
+    except (ValueError, OSError, subprocess.CalledProcessError) as error:
         raise SystemExit('Configuration stopped: ' + str(error))

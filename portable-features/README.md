@@ -1,3 +1,5 @@
+서버 TTS를 포함한 한 번 설치·업데이트·롤백: [SERVER-TTS.md](SERVER-TTS.md). 기본 설치에는 서버 TTS가 포함되며 `--without-tts`로 제외할 수 있습니다. `--start`를 추가하면 빌드·실행까지 합니다.
+
 # Kavita 수정 기능만 다른 환경에 설치하기
 
 ## PWA 앱 설치
