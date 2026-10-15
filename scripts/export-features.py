@@ -16,6 +16,7 @@ if offline.is_dir():
     source = worker.read_text()
     normalised = re.sub(r"const VERSION='[^']+';", "const VERSION='@VERSION@';", source)
     digest = hashlib.sha256(normalised.encode())
+    digest.update((root / 'proxy/swipe.js').read_bytes())
     for path in sorted(offline.glob('*')):
         if path.is_file() and path != worker:
             digest.update(path.name.encode()); digest.update(path.read_bytes())

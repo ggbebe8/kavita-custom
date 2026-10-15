@@ -1,6 +1,7 @@
 import {identity,accountKey,get,change,myBooks,myStates,removeBook,pending,json,samePosition,noteDocument,noteHtml} from './store.js';
 import {downloadBook,materialize,rewriteAssets} from './download.js';
 import {syncAll,chooseConflict} from './sync.js';
+import {prepareNative,nativeURL} from './native.js';
 const $=id=>document.getElementById(id),status=message=>{$('status').textContent=message;};
 let active=null,state=null,resources=null,section=0,screen=0,renderToken=0,editing=null,saving=Promise.resolve(),busy=false,lastSelection=null;
 const marker=/\[boolean\('(?:kvoffline1:([0-9]+)|kvscreen1:[0-9a-f-]+:[0-9.]+)'\)\](?:\[boolean\('kvscreen1:[0-9a-f-]+:[0-9.]+'\)\])?$/;
@@ -43,6 +44,8 @@ async function openBook(key){
       state=await change(key,current=>pending(current)?current:{...current,progress:remote,baseProgress:remote,annotations,view:samePosition(current.progress,remote)?current.view:null});
     }catch(e){status('서버에 연결하지 못해 기기의 저장 위치로 엽니다.');}
   }
+  if(await prepareNative(active,status)){location.href=nativeURL(active);return;}
+  status('기존 리더가 아직 준비되지 않아 보관된 기본 뷰어로 엽니다. 온라인에서 다시 열면 기존 리더를 준비합니다.');
   resources?.dispose();resources=await materialize(active);
   $('heading').textContent=active.title;$('library').hidden=true;$('reader').hidden=false;
   $('sections').replaceChildren(...active.sections.map((html,index)=>{
@@ -201,7 +204,7 @@ let resizeTimer;
 $('font').onchange=()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(async()=>{if(!active)return;try{const path=visibleAnchor().path;await render(section,null,path);await savePosition();}catch(e){error(e);}},150);};
 window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(async()=>{if(!active)return;try{await saving;await render(section,null,state.progress.bookScrollId);}catch(e){error(e);}},250);});
 $('export').onclick=async()=>{
-  try{const states=(await myStates()).filter(pending),data={format:'kavita-offline-pending-v1',exportedAt:new Date().toISOString(),account:identity()?.username,states};const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='kavita-offline-pending.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(e){error(e);}
+  try{const states=(await myStates()).filter(pending),data={format:'kavita-offline-pending-v1',exportedAt:new Date().toISOString(),account:identity()?.username,states:states.map(({nativeResponses,...state})=>state)};const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='kavita-offline-pending.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(e){error(e);}
 };
 window.addEventListener('online',()=>void sync());
 window.addEventListener('storage',event=>{if(event.key==='kavita-user'&&identity()?.key!==account)location.reload();});
@@ -219,5 +222,6 @@ try{
     const button=document.createElement('button');button.textContent='이 책을 오프라인으로 저장';$('library').prepend(button);
     button.onclick=async()=>{button.disabled=true;try{const book=await downloadBook(Number(download),{status});await refreshLibrary();button.remove();await openBook(book.key);}catch(e){error(e);button.disabled=false;}};
   }else if(read&&/^\d+$/.test(read))await openBook(accountKey(read));
+  if(params.has('native-error'))status('기존 리더를 준비하지 못했습니다. 저장한 책과 변경은 유지됩니다. 인터넷 연결 후 읽기를 다시 눌러주세요.');
   if(navigator.onLine)void sync();
 }catch(e){error(e);}

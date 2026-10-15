@@ -350,7 +350,7 @@
   const nativeFetch = window.fetch.bind(window);
   // Background offline sync must not be interpreted as a native reader GET
   // or rewritten with whichever page is currently visible in this tab.
-  window.__kavitaOfflineFetch=nativeFetch;
+  window.__kavitaOfflineFetch ||= nativeFetch;
   window.__kavitaReaderSection=()=>book?{id:book.id,index:book.index,length:sections.get(book.id)}:null;
   const sections = new Map();
   const revisions = new Map();

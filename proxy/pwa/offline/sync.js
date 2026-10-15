@@ -109,7 +109,9 @@ async function finishDraft(key,id,sent,outcome){
     let annotations=current.annotations.filter(note=>note.id!==(outcome?.id||sent.local.id));if(outcome)annotations.push(outcome);
     if(latest.rev===sent.rev)delete drafts[id];
     else if(outcome)drafts[id]={...latest,op:latest.op==='delete'?'delete':'update',base:outcome,local:{...latest.local,id:outcome.id}};
-    return {...current,annotations,drafts};
+    const nativeServerIds={...current.nativeServerIds};
+    if(outcome)for(const [temporary,operation] of Object.entries(current.nativeIds||{}))if(operation===id)nativeServerIds[temporary]=outcome.id;
+    return {...current,annotations,drafts,nativeServerIds};
   });
 }
 export async function chooseConflict(conflict){

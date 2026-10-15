@@ -1,4 +1,4 @@
-import {identity,myStates,myBooks,pending,json,get,accountKey} from './store.js';
+import {identity,myStates,myBooks,pending,json,get,accountKey,samePosition} from './store.js';
 import {syncAll,chooseConflict} from './sync.js';
 if(isSecureContext&&'serviceWorker' in navigator){
   const base='/kavita-pwa/offline/';let syncing=false;
@@ -6,11 +6,25 @@ if(isSecureContext&&'serviceWorker' in navigator){
   const link=document.createElement('a');link.href=base+'index.html';link.textContent='오프라인 책장';link.style.cssText='position:fixed;left:8px;bottom:8px;z-index:1030;font:12px system-ui;padding:6px 9px;background:#202938;color:#fff;border-radius:7px;text-decoration:none';document.body.append(link);
   const notice=document.createElement('span');notice.setAttribute('role','status');notice.style.cssText='display:block;font-size:10px';link.append(notice);
   async function sync(){
-    if(syncing||!identity()||!navigator.onLine)return;
-    syncing=true;try{if((await myStates()).some(pending))await syncAll({ask:chooseConflict,status:text=>notice.textContent=text});}catch{notice.textContent='미동기화 변경 보관 중';}finally{syncing=false;}
+    if(syncing||!identity()||!navigator.onLine||new URLSearchParams(location.search).has('kv-prepare'))return;
+    syncing=true;try{
+      const local=new URLSearchParams(location.search).get('kv-offline')==='1',chapter=local?Number(location.pathname.split('/').at(-1)):null;
+      const before=chapter?await get('states',accountKey(chapter)):null;
+      let movedToRemote=false;
+      if((await myStates()).some(pending))await syncAll({ask:async conflict=>{const choice=await chooseConflict(conflict);if(conflict.kind==='progress'&&choice==='remote')movedToRemote=true;return choice;},status:text=>notice.textContent=text});
+      const after=chapter?await get('states',accountKey(chapter)):null;
+      if(movedToRemote&&before&&after&&!after.dirty&&!samePosition(before.progress,after.progress))location.reload();
+    }catch{notice.textContent='미동기화 변경 보관 중';}finally{syncing=false;}
   }
   function refresh(){
     const root=document.querySelector('app-book-reader');link.hidden=!!root;
+    if(root&&new URLSearchParams(location.search).get('kv-offline')==='1'&&!new URLSearchParams(location.search).has('kv-prepare')){
+      const header=root.querySelector('.reader-header');
+      if(header&&!header.querySelector('[data-kavita-offline-native]')){
+        const badge=document.createElement('a');badge.dataset.kavitaOfflineNative='';badge.href=base+'index.html';badge.textContent='오프라인 저장본';badge.title='읽기 위치·메모는 기기에 먼저 저장합니다. 연결되면 자동 동기화합니다. 클릭하면 오프라인 책장으로 이동합니다.';
+        badge.style.cssText='position:absolute;right:4px;top:100%;font:10px system-ui;padding:1px 4px;background:var(--body-bg,#171b24);color:var(--body-text-color,#aaa);border-radius:0 0 3px 3px;text-decoration:none';header.append(badge);
+      }
+    }
     // Download belongs beside the native Read/Continue button on the detail
     // page. Resolve the same continue-point as Kavita without opening a reader.
     for(const old of document.querySelectorAll('app-book-reader [data-kavita-offline]'))old.remove();
