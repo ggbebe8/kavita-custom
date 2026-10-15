@@ -1,6 +1,30 @@
-서버 TTS를 포함한 한 번 설치·업데이트·롤백: [SERVER-TTS.md](SERVER-TTS.md). 기본 설치에는 서버 TTS가 포함되며 `--without-tts`로 제외할 수 있습니다. `--start`를 추가하면 빌드·실행까지 합니다.
-
 # Kavita 수정 기능만 다른 환경에 설치하기
+
+## Summary — 현재 기능 구성 재현하기 (데이터 제외)
+
+`portable-features` **폴더 전체**를 새 서버로 가져오세요. Kavita를 따로 설치할 필요 없이 **기존 추가 기능 + 서버 TTS**를 함께 설치합니다.
+
+이 README가 있는 폴더에서 실행:
+
+```bash
+python3 install.py --start
+```
+
+HTTPS까지 새로 구성하려면 위 명령 **대신** 실행합니다. `books.example.com`은 본인 도메인으로 바꾸세요.
+
+```bash
+python3 install.py --https-domain books.example.com --start
+```
+
+- **준비:** Linux/WSL, Docker Engine·Compose 플러그인, Python 3, 인터넷 연결. 최초 빌드·음성 모델 준비에 수 분이 걸릴 수 있습니다.
+- **설치 결과:** `~/docker/kavita-custom`에 설치하며 HTTP 접속은 `http://서버주소:5000`입니다. 기존 설치 폴더는 덮어쓰지 않습니다.
+- **설치 후:** 새 계정을 만들고, 설치 폴더의 `books`에 책을 넣은 뒤 웹 라이브러리에 `/books`를 등록하세요. 브라우저별 옵션은 다시 선택합니다.
+- **HTTPS:** 생략해도 설치·웹 읽기·TTS가 가능합니다. 외부 주소의 PWA 설치·오프라인 기능에는 HTTPS가 필요합니다. 자동 HTTPS는 도메인의 DNS와 80/443 접근을 준비해야 하며, 이미 HTTPS 프록시가 있다면 기존 것을 사용하세요.
+- **데이터 제외:** 책·계정·읽기 위치·메모는 복원되지 않습니다. 이를 유지하려면 별도 books/config 백업이 필요합니다. 이미 운영 중인 서버에서는 포트 충돌과 같은 config의 중복 사용을 먼저 확인하세요.
+
+업데이트·롤백은 [SERVER-TTS.md](SERVER-TTS.md), 오프라인 사용법은 [OFFLINE.md](OFFLINE.md)를 참고하세요. 아래는 상세 설명입니다.
+
+---
 
 ## PWA 앱 설치
 
