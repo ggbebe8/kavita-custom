@@ -69,6 +69,13 @@ export async function nativeRequest(request){
   let data;try{data=JSON.parse(request.body||'{}');}catch{return response({},400);}
   // Keep Kavita's normal login renewal when connectivity returns. Tokens are
   // returned only to AccountService's existing login storage, never IndexedDB.
+  if(path==='/api/account/refresh-token'&&request.method==='POST'&&(prepare||!navigator.onLine)){
+    // AccountService starts with isOnline=true even on an offline cold launch.
+    // Its renewal timer must keep the existing login until a real reconnect,
+    // rather than failing with 503 and showing the generic Angular error toast.
+    const current=JSON.parse(localStorage.getItem('kavita-user'));
+    return response({token:current.token,refreshToken:current.refreshToken});
+  }
   if(path==='/api/account/refresh-token'&&request.method==='POST'&&!prepare&&navigator.onLine){
     const r=await network(url,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${user.token}`,'X-Kavita-Offline-Network':'1'},body:JSON.stringify(data)});
     if(identity()?.key!==user.key)return response({},403);

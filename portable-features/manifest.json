@@ -18,9 +18,9 @@
   "proxy/pwa/offline/download.js": "dc696e2e40c23ec602136ececc8f36548ff5de93102c7001e0068807a05e71c0",
   "proxy/pwa/offline/index.html": "7971e7f34173c0250c61ce09b59b01068a4325548e29d9e5f5ae63f3c8f6398c",
   "proxy/pwa/offline/native-bootstrap.js": "316b3248212a9d8309db95d65775c736ce16dd54f4b05ad6314b4ee1f15d0b12",
-  "proxy/pwa/offline/native.js": "8ff4c684cb8aba3cc9d444676150ab733930b2491769b6549ed6808db7cd24db",
+  "proxy/pwa/offline/native.js": "f74070580836019cf54cbc72b9de04ff8c522718fd75b1dfb5a68a0435a420c2",
   "proxy/pwa/offline/offline.css": "77681fb105ea039cb90b34e947f4aa838d56a4b0eb7b6d47d2a454fcd4c2c5d3",
   "proxy/pwa/offline/store.js": "890fd98a949898b0873160e88b034f1f82983ede7a26b3dd4626b93b2fdf4b3a",
   "proxy/pwa/offline/sync.js": "e14c6ccd5dcc4c26c24c8e75100354af6c207e96a1296bfa792a7b3125b64d79",
-  "proxy/pwa/offline/worker.js": "c87d9eecd2c069527430d729458f53fdc051e73e1008efa16502a17bb6ee2dcd"
+  "proxy/pwa/offline/worker.js": "e84d6b8a6a8092a8d4646d3a0482eac85422035a901b57a643ae2501bc6acea9"
 }

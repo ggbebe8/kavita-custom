@@ -21,6 +21,12 @@ const server=http.createServer((req,res)=>{const u=new URL(req.url,'http://local
  await page.evaluate(()=>new Promise((resolve,reject)=>{const c=new MessageChannel();c.port1.onmessage=e=>e.data.ok?resolve():reject(new Error(e.data.error));navigator.serviceWorker.controller.postMessage({type:'KAVITA_NATIVE_PRECACHE'},[c.port2]);}));
  await context.setOffline(true);
  assert.equal(await page.evaluate(async()=>(await window.nativeLazy()).saved),true,'unvisited lazy chunks with Vary headers are available offline');
+ const offlineRenewal=await page.evaluate(async()=>{
+  const before=localStorage.getItem('kavita-user');
+  const r=await fetch('/api/account/refresh-token',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+  return {status:r.status,data:await r.json(),unchanged:before===localStorage.getItem('kavita-user')};
+ });
+ assert.equal(offlineRenewal.status,200);assert.equal(offlineRenewal.data.token,'existing-token');assert.equal(offlineRenewal.unchanged,true);assert.equal(apiNetwork,0);
  const result=await page.evaluate(async()=>{
   const s=await import('/kavita-pwa/offline/store.js');
   const call=async(path,body,method='POST')=>{const r=await fetch('/api/'+path,{method,body:JSON.stringify(body),headers:{'Content-Type':'application/json'}});return {status:r.status,text:await r.text()};};
