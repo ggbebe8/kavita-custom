@@ -1,3 +1,36 @@
+// Clickable help for injected settings, matching the native info-circle tooltip.
+(() => {
+  if(window.__kavitaSettingHelp)return;
+  let active=null;
+  function close(){if(!active)return;active.tip.remove();active.button.setAttribute('aria-expanded','false');active.button.removeAttribute('aria-describedby');active=null;}
+  window.__kavitaSettingHelp=(holder,title,id)=>{
+    if(holder.querySelector('[data-kavita-setting-help]'))return;
+    const label=holder.querySelector('label'),description=holder.querySelector('small');if(!label||!description)return;
+    description.hidden=true;description.style.setProperty('display','none','important');
+    const row=document.createElement('div');row.className='d-flex align-items-center';
+    const button=document.createElement('button');button.type='button';button.className='btn btn-icon p-0 ms-1';button.dataset.kavitaSettingHelp=id;
+    button.setAttribute('aria-label',title+' 설명');button.setAttribute('aria-expanded','false');button.style.cssText='border:0;background:transparent;color:inherit;line-height:1;padding:0';
+    const icon=document.createElement('i');icon.className='fa fa-info-circle';icon.setAttribute('aria-hidden','true');button.append(icon);
+    label.before(row);row.append(label,button);label.style.marginBottom='0';
+    const nativeLabel=holder.closest('app-reader-settings')?.querySelector('#fontsize')?.closest('.controls')?.querySelector('label')||label;button.style.color=getComputedStyle(nativeLabel).color;
+    button.addEventListener('click',event=>{
+      event.preventDefault();event.stopPropagation();if(active?.button===button){close();return;}close();
+      const tip=document.createElement('div');tip.id=id;tip.className='tooltip show';tip.setAttribute('role','tooltip');tip.style.cssText='position:fixed;z-index:1090;opacity:1;pointer-events:none;max-width:calc(100vw - 24px)';
+      const text=document.createElement('div');text.className='tooltip-inner';text.textContent=description.textContent;
+      text.style.cssText='max-width:300px;text-align:left;font:13px/1.5 system-ui,sans-serif;padding:8px 10px;border-radius:6px;color:var(--bs-tooltip-color,#fff);background:var(--bs-tooltip-bg,#000)';tip.append(text);
+      (document.fullscreenElement||document.body).append(tip);
+      const anchor=button.getBoundingClientRect(),rect=tip.getBoundingClientRect();
+      tip.style.left=Math.max(12,Math.min(innerWidth-rect.width-12,anchor.left+anchor.width/2-rect.width/2))+'px';
+      tip.style.top=Math.max(8,Math.min(innerHeight-rect.height-8,anchor.top-rect.height-8>=8?anchor.top-rect.height-8:anchor.bottom+8))+'px';
+      button.setAttribute('aria-expanded','true');button.setAttribute('aria-describedby',id);active={holder,button,tip};
+    });
+  };
+  document.addEventListener('pointerdown',event=>{if(active&&!active.button.contains(event.target))close();},{capture:true,passive:true});
+  document.addEventListener('keydown',event=>{if(active&&event.key==='Escape'){close();event.stopPropagation();event.preventDefault();}},{capture:true});
+  document.addEventListener('scroll',close,{capture:true,passive:true});window.addEventListener('resize',close);window.addEventListener('pagehide',close);
+  new MutationObserver(()=>{if(active&&!active.holder.isConnected)close();}).observe(document.body,{childList:true,subtree:true});
+})();
+
 (() => {
   'use strict';
   if (window.__kavitaSwipeInstalled) return;
@@ -200,6 +233,7 @@
         row.className = 'controls my-3';
         row.innerHTML = '<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-height-tap-zones><span class="form-check-label">높이에 따라 페이지 넘기기</span></label><small class="d-block">좌우 각 20% 영역: 위쪽 1/3은 이전, 아래쪽 2/3은 다음 페이지. 가운데는 기존 메뉴 동작을 유지합니다. 설정은 이 브라우저에 저장됩니다.</small>';
         fontRow.after(row);
+        window.__kavitaSettingHelp(row,'높이에 따라 페이지 넘기기','kavita-help-height-tap');
         control = row.querySelector('input');
         control.addEventListener('change', () => {
           const key = preferenceKey();
@@ -636,7 +670,7 @@
       if(!control) {
         const holder=document.createElement('div');holder.className='controls my-3';
         holder.innerHTML='<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-reading-summary><span class="form-check-label">목차·진행률 표시</span></label><small class="d-block">좌측 하단에 목차 제목을 표시하고, 페이지 숫자에 전체 화면 페이지 기준 진행률(%)을 함께 표시합니다. 끄면 하단바 페이지 숫자만 가운데에 표시하며 집중 모드의 별도 페이지 표시는 숨깁니다. 설정은 이 브라우저에 저장됩니다.</small>';
-        row.after(holder);control=holder.querySelector('input');
+        row.after(holder);window.__kavitaSettingHelp(holder,'목차·진행률 표시','kavita-help-reading-summary');control=holder.querySelector('input');
         control.addEventListener('change',()=>{const key=summaryKey();summaryPreferences.set(key,control.checked);try{localStorage.setItem(key,String(control.checked));}catch{}update();});
       }
       control.closest('.controls').querySelector('small').style.color=getComputedStyle(row.querySelector('label')||row).color;

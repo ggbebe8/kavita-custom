@@ -14,7 +14,7 @@ const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p id="p$
    if(url.pathname.endsWith('/chapters'))return route.fulfill({json:[{title:'첫 목차',page:0,part:'p0',children:[{title:'중간 목차',page:0,part:'p5',children:[]}]},{title:'다음 목차',page:1,part:'',children:[]},{title:'마지막 목차',page:2,part:'p0',children:[]}]});
    if(url.pathname.endsWith('/book-page')){if(slow)await new Promise(resolve=>setTimeout(resolve,250));return route.fulfill({contentType:'text/html',body:sections[Number(url.searchParams.get('page'))]})}
    return route.fulfill({contentType:'text/html',body:`<style>
-    body{margin:0}.reader-container{width:100vw}.book-content{height:360px;column-count:1;column-gap:20px;overflow:hidden;font:16px/24px sans-serif}p{margin:0 0 12px}
+    body{margin:0}.fa-info-circle::before{content:"i"}.reader-container{width:100vw}.book-content{height:360px;column-count:1;column-gap:20px;overflow:hidden;font:16px/24px sans-serif}p{margin:0 0 12px}
     .bottom-bar{position:fixed;bottom:0;width:100%;height:40px}ngb-modal-window{position:fixed;inset:100px;background:white;z-index:1055}ngb-modal-window input{display:block}
    </style><app-book-reader><div class="reader-container"><div class="reading-section column-layout-1"><div class="book-container immersive"><div class="book-content column-layout-1" style="max-height:360px"></div></div></div></div></app-book-reader>`});
   });
@@ -58,8 +58,19 @@ const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p id="p$
     const control=page.locator('[data-kavita-reading-summary]');await control.waitFor();await control.setChecked(enabled);
     assert.equal(await control.count(),1);
     await page.locator('[data-kavita-height-tap-zones]').waitFor();
-    for(const selector of ['[data-kavita-reading-summary]','[data-kavita-height-tap-zones]'])assert.equal(await page.locator(selector).evaluate(n=>getComputedStyle(n.closest('.controls').querySelector('small')).color),'rgb(20, 25, 30)','option descriptions use the native setting label color');
-    await page.locator('app-epub-setting-drawer').evaluate(n=>n.remove());
+    for(const selector of ['[data-kavita-reading-summary]','[data-kavita-height-tap-zones]']) {
+      const owner=page.locator('.controls').filter({has:page.locator(selector)}),help=owner.locator('[data-kavita-setting-help]');
+      assert.equal(await owner.locator('small').isVisible(),false,'description does not occupy space under setting');
+      assert.equal(await help.evaluate(n=>getComputedStyle(n).color),'rgb(20, 25, 30)','info icon matches native setting text color');
+      const checked=await page.locator(selector).isChecked();await help.click();
+      const tooltip=page.locator('[role="tooltip"]');await tooltip.waitFor();assert.equal(await tooltip.textContent(),await owner.locator('small').textContent());
+      assert.equal(await page.locator(selector).isChecked(),checked,'opening help does not toggle setting');assert.equal(await help.getAttribute('aria-expanded'),'true');
+      await help.press('Escape');assert.equal(await tooltip.count(),0);
+      await help.press('Enter');await tooltip.waitFor();await page.locator('#fontsize').click();assert.equal(await tooltip.count(),0,'outside tap dismisses help');
+    }
+    await page.locator('[data-kavita-setting-help]').first().click();
+
+    await page.locator('app-epub-setting-drawer').evaluate(n=>n.remove());await page.waitForFunction(()=>!document.querySelector('[role="tooltip"]'));
   }
   await summarySettings(false);await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').hidden);
   assert.equal(await label.isVisible(),true,'native footer keeps the page number when summary is off');
