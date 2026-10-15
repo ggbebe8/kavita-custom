@@ -57,7 +57,7 @@ const server=http.createServer((req,res)=>{
   await page.locator('.offcanvas-header button').last().click();await page.waitForSelector('app-view-annotations-drawer',{state:'hidden'});
   try{await page.waitForFunction(()=>/^\d+ \/ \d+$/.test(document.getElementById('kavita-screen-page-indicator')?.dataset.pages||'')||document.getElementById('kavita-screen-page-indicator')?.dataset.pages==='—',{},{timeout:45000});if(await page.locator('#kavita-screen-page-indicator').evaluate(n=>n.dataset.pages)==='—')throw new Error('Page calculation failed');}catch(error){console.log('Counter state:',await page.evaluate(()=>({text:document.getElementById('kavita-screen-page-indicator')?.dataset.pages,title:document.getElementById('kavita-screen-page-indicator')?.title,section:document.querySelector('.reading-section')?.className,pending:window.__kavitaNativePending,error:window.__kavitaPageCalculationError})));throw error;}
   assert.equal(await page.locator('#kavita-screen-page-indicator').evaluate(n=>!!n.closest('.bottom-bar')),false,'computed pages stay separate from native footer');
-  assert.equal(await page.locator('.bottom-bar a.btn-link').isVisible(),true,'native section count remains visible');
+  assert.equal(await page.locator('.bottom-bar a.btn-link').isVisible(),false,'native content-file number is replaced by screen pages');
   assert.match(await page.locator('#kavita-reading-summary').getAttribute('aria-label'),/ · \d+%$/,'TOC title and computed progress are shown offline');
   const original=await page.locator('.book-content').innerText();
   await page.evaluate(()=>window.__kavitaTurnPage(document.querySelector('app-book-reader'),1,'test'));

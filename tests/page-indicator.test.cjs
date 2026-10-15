@@ -69,7 +69,7 @@ const texts = [12,20,10].map(n => `<style>.book-content p { text-indent: 4px; }<
     await page.waitForFunction(()=>/^\d+ \/ \d+$/.test(document.querySelector('#kavita-screen-page-indicator').dataset.pages));
     assert(pageRequests()-beforeRequests>=texts.length,'Storage unavailable falls back to calculation');
     assert.equal(await page.evaluate(()=>document.querySelectorAll('iframe').length),0);
-    const overlaps=await page.evaluate(()=>{const a=document.querySelector('#kavita-screen-page-indicator').getBoundingClientRect(),b=document.querySelector('.bottom-bar').getBoundingClientRect();return a.bottom>b.top&&a.top<b.bottom;});assert.equal(overlaps,false,'calculated pages do not cover the native footer');assert.equal(await page.locator('.bottom-bar a.btn-link').isVisible(),true,'native section count remains visible');
+    const overlaps=await page.evaluate(()=>{const a=document.querySelector('#kavita-screen-page-indicator').getBoundingClientRect(),b=document.querySelector('.bottom-bar').getBoundingClientRect();return a.bottom>b.top&&a.top<b.bottom;});assert.equal(overlaps,false,'calculated pages do not cover the native footer');assert.equal(await page.locator('.bottom-bar a.btn-link').isVisible(),false,'native content-file number is replaced by screen pages');
     // Chapter DOM decoration and attribute ordering are not layout settings.
     await page.evaluate(()=>{const c=document.querySelector('.book-content');c.classList.add('section-loaded');c.style.cssText='font-size:16px;max-height:360px';});
     beforeRequests=pageRequests();await navigate(1,true);

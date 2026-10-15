@@ -50,8 +50,13 @@ const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p id="p$
   const summary=page.locator('#kavita-reading-summary');
   await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').getAttribute('aria-label')?.startsWith('첫 목차 · '));
   assert.equal(await label.evaluate(n=>!!n.closest('.bottom-bar')),false,'screen counter stays separate from the native footer');
-  assert.equal(await page.locator('.bottom-bar a.btn-link').isVisible(),true,'original section counter remains visible');
+  assert.equal(await page.locator('.bottom-bar a.btn-link').isVisible(),false,'native content-file number is replaced by screen pages');
   assert.equal(await page.locator('.time-left').isVisible(),true,'existing time-left remains available');
+  const nativeCounter=page.locator('#kavita-native-screen-page-number');
+  await page.waitForFunction(()=>!document.querySelector('#kavita-native-screen-page-number')?.disabled);
+  assert.equal(await nativeCounter.textContent(),`1 / ${total}`);
+  await nativeCounter.click();await input.waitFor();assert.equal(await input.getAttribute('max'),String(total));assert.equal(await page.locator('.modal-title').textContent(),'전체 페이지로 이동');await page.locator('ngb-modal-window .btn-secondary').click();
+
   assert.equal(await summary.getAttribute('aria-label'),`첫 목차 · ${Math.floor(100/total)}%`);
   async function summarySettings(enabled){
     await page.evaluate(()=>{const drawer=document.createElement('app-epub-setting-drawer');drawer.innerHTML='<app-reader-settings><div class="controls" style="color:white"><label style="color:rgb(20,25,30)">글자 크기</label><input id="fontsize"></div></app-reader-settings>';document.body.append(drawer);});
@@ -87,7 +92,7 @@ const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p id="p$
   await jump(3,true);assert.match(await summary.getAttribute('aria-label'),/^중간 목차 · /);assert.equal(await page.evaluate(()=>index),0,'same-section jump needs no section load');assert.equal(await page.locator('.book-content').evaluate(el=>Math.round(el.scrollLeft/820)),2);
   slow=true;const target=counts[0]+3;await jump(target);assert.equal(await page.evaluate(()=>index),1);assert.equal(await page.locator('.book-content').evaluate(el=>Math.round(el.scrollLeft/820)),2);assert.equal(await summary.getAttribute('aria-label'),`다음 목차 · ${Math.floor(target*100/total)}%`);
   await page.waitForTimeout(300);assert.ok(saves.some(save=>save.pageNum===1&&save.bookScrollId.includes(':2.000000')),'native progress receives exact selected screen');
-  await jump(total);await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').getAttribute('aria-label')==='마지막 목차 · 100%');assert.equal(await label.textContent(),`${total}/${total} (100%)`);assert.equal(await page.evaluate(()=>index),2);await jump(1);assert.equal(await page.evaluate(()=>index),0);
+  await jump(total);await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').getAttribute('aria-label')==='마지막 목차 · 100%');assert.equal(await label.textContent(),`${total}/${total} (100%)`);assert.equal(await nativeCounter.textContent(),`${total} / ${total}`);assert.equal(await page.evaluate(()=>index),2);await jump(1);assert.equal(await page.evaluate(()=>index),0);
   await page.evaluate(()=>closeMenu());await jump(target);assert.equal(await page.locator('.reader-header').count(),0,'immersive menu hidden after jump');
   await open();await page.locator('ngb-modal-window .modal-header button').click();await page.waitForTimeout(150);assert.equal(await page.locator('ngb-modal-window').count(),0);assert.equal(await page.locator('.reader-header').count(),0,'cancel restores immersive menu');
   await open();const jumpCount=await page.evaluate(()=>nativeJumps.length);await page.setViewportSize({width:900,height:600});await input.fill('1');await confirm.click();assert.equal(await page.locator('ngb-modal-window').count(),1);assert.equal(await page.evaluate(()=>nativeJumps.length),jumpCount);assert.match(await page.locator('#kavita-page-jump-validation').textContent(),/설정이 변경/);await input.press('Escape');
