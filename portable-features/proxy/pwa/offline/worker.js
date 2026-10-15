@@ -1,6 +1,6 @@
 /* Public application code only is HTTP-cached. Authenticated book data stays
    in account-scoped IndexedDB and is supplied by the requesting reader client. */
-const VERSION='kavita-offline-shell-71ea08e80ffaf643';
+const VERSION='kavita-offline-shell-cdaeb01572e76f82';
 const ROOT='/kavita-pwa/offline/';
 const FILES=['index.html','offline.css','app.js','store.js','download.js','sync.js','bridge.js','native.js','native-bootstrap.js'].map(name=>ROOT+name);
 self.addEventListener('install',event=>event.waitUntil((async()=>{
@@ -52,8 +52,11 @@ async function precacheNative(){
   await cache.put('/__kavita_native_shell__',new Response(html,{headers}));
 }
 self.addEventListener('message',event=>{
+  if(event.data?.type==='KAVITA_NATIVE_STATUS'&&event.ports[0]){
+    event.waitUntil((async()=>{const shell=await(await caches.open(VERSION)).match('/__kavita_native_shell__');event.ports[0].postMessage({nativeProtocol:1,version:VERSION,shellReady:!!shell&&(await shell.text()).includes('/kavita-pwa/offline/native-bootstrap.js')});})());return;
+  }
   if(event.data?.type!=='KAVITA_NATIVE_PRECACHE'||!event.ports[0])return;
-  event.waitUntil(precacheNative().then(()=>event.ports[0].postMessage({ok:true}),error=>event.ports[0].postMessage({ok:false,error:'기존 리더 파일을 저장하지 못했습니다: '+error.message})));
+  event.waitUntil(precacheNative().then(()=>event.ports[0].postMessage({ok:true,version:VERSION}),error=>event.ports[0].postMessage({ok:false,error:'기존 리더 파일을 저장하지 못했습니다: '+error.message})));
 });
 self.addEventListener('fetch',event=>{
   const url=new URL(event.request.url);if(url.origin!==self.location.origin)return;

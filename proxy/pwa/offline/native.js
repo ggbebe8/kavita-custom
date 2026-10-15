@@ -108,20 +108,44 @@ export async function nativeRequest(request){
   }
   return response({error:'이 설정은 온라인에서 변경하세요. 읽기 위치와 메모는 기기에 보관됩니다.'},503);
 }
+function workerMessage(worker,message,timeout){
+  return new Promise((resolve,reject)=>{
+    const channel=new MessageChannel(),timer=setTimeout(()=>{channel.port1.close();reject(new Error('오프라인 리더 응답 시간이 초과되었습니다.'));},timeout);
+    channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();resolve(event.data);};
+    try{worker.postMessage(message,[channel.port2]);}catch(error){clearTimeout(timer);channel.port1.close();reject(error);}
+  });
+}
+export async function nativeWorker(status=()=>{}){
+  const registration=await navigator.serviceWorker.ready;
+  async function inspect(){const controller=navigator.serviceWorker.controller;if(!controller)return null;try{const info=await workerMessage(controller,{type:'KAVITA_NATIVE_STATUS'},1500);if(info.nativeProtocol===1)return {controller,...info};}catch{}return null;}
+  let current=await inspect();if(current)return current;
+  if(!navigator.onLine)return null;
+  status('오프라인 리더 업데이트를 확인하는 중…');
+  await registration.update();
+  const deadline=Date.now()+25000;
+  while(Date.now()<deadline){
+    current=await inspect();if(current)return current;
+    await new Promise(resolve=>{const timer=setTimeout(done,300);function done(){clearTimeout(timer);navigator.serviceWorker.removeEventListener('controllerchange',done);resolve();}navigator.serviceWorker.addEventListener('controllerchange',done,{once:true});});
+  }
+  throw new Error('오프라인 리더 업데이트를 완료하지 못했습니다. 인터넷 연결 후 새로고침하여 다시 열어주세요. 저장한 책과 변경은 유지됩니다.');
+}
 export async function prepareNative(book,status=()=>{}){
-  if(book.native?.ready){for(const name of await caches.keys())if(name.startsWith('kavita-offline-shell-')&&await(await caches.open(name)).match('/__kavita_native_shell__'))return true;}
+  const active=await nativeWorker(status);
+  if(book.native?.ready&&active?.shellReady)return true;
   if(!navigator.onLine)return false;
-  await navigator.serviceWorker.ready;
-  if(!navigator.serviceWorker.controller)await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('리더 준비를 위해 화면을 새로고침하세요.')),12000);navigator.serviceWorker.addEventListener('controllerchange',()=>{clearTimeout(timer);resolve();},{once:true});});
+  if(!active)throw new Error('오프라인 리더를 업데이트한 뒤 다시 시도하세요.');
   // A fixture/older server without the Angular shell keeps the recoverable
   // legacy reader. Actual Kavita must successfully render before being marked.
   const shell=await network('/',{cache:'no-store'});const html=await shell.text();if(!html.includes('app-root'))return false;
   status('기존 Kavita 리더를 오프라인용으로 준비 중…');
-  await new Promise((resolve,reject)=>{
-    const channel=new MessageChannel(),timer=setTimeout(()=>reject(new Error('리더 파일 저장 시간이 초과되었습니다. 다시 시도하세요.')),90000);
-    channel.port1.onmessage=e=>{clearTimeout(timer);e.data.ok?resolve():reject(new Error(e.data.error||'리더 파일 저장 실패'));};
-    navigator.serviceWorker.controller.postMessage({type:'KAVITA_NATIVE_PRECACHE',html},[channel.port2]);
-  });
+  // A worker can change while files are being downloaded. Only navigate
+  // after the worker that now controls this tab has finished its own cache.
+  for(let attempt=0;attempt<3;attempt++){
+    const current=await nativeWorker(status),result=await workerMessage(current.controller,{type:'KAVITA_NATIVE_PRECACHE'},90000);
+    if(!result.ok)throw new Error(result.error||'리더 파일 저장 실패');
+    if(current.controller===navigator.serviceWorker.controller)break;
+    if(attempt===2)throw new Error('리더 업데이트 중입니다. 저장한 책을 다시 열어주세요.');
+  }
   // Kavita's frame-ancestors 'none' is kept intact. Warm the original
   // application as a top-level page instead of weakening its framing policy.
   location.assign(nativeURL(book)+'&kv-prepare=1');

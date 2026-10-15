@@ -33,11 +33,14 @@
       const cover=document.createElement('div');cover.setAttribute('role','status');cover.style.cssText='position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;background:var(--body-bg,#171b24);color:var(--body-text-color,#fff);font:16px system-ui';
       const text=document.createElement('span');text.textContent='오프라인 리더 준비 중…';const back=document.createElement('a');back.href='/kavita-pwa/offline/index.html';back.textContent='책장으로';back.style.color='inherit';cover.append(text,back);document.body.append(cover);
     },{once:true});
+    function fail(error){try{sessionStorage.setItem('kavita-native-error',String(error?.message||'리더 준비 시간이 초과되었습니다. 인터넷 연결 후 다시 시도하세요.').slice(0,400));}catch{}location.replace('/kavita-pwa/offline/index.html?native-error=1');}
     let stable=0;const timer=setInterval(()=>{
       const root=document.querySelector('app-book-reader .book-content');
-      if(root?.textContent.trim()&&!window.__kavitaNativePending&&document.fonts.status==='loaded'&&!document.querySelector('app-book-reader .reading-section.is-loading'))stable++;else stable=0;
-      if(stable>=6){clearInterval(timer);import('/kavita-pwa/offline/native.js').then(module=>module.finishNativePreparation()).catch(()=>location.replace('/kavita-pwa/offline/index.html?native-error=1'));}
-    },300);setTimeout(()=>{clearInterval(timer);location.replace('/kavita-pwa/offline/index.html?native-error=1');},45000);return;
+      const images=[...(root?.querySelectorAll('img')||[])];
+      const loaded=!!root&&(root.childNodes.length>0||!!window.__kavitaReaderSection?.())&&images.every(img=>img.complete&&img.naturalWidth>0);
+      if(loaded&&!window.__kavitaNativePending&&document.fonts.status==='loaded'&&!document.querySelector('app-book-reader .reading-section.is-loading'))stable++;else stable=0;
+      if(stable>=6){clearInterval(timer);import('/kavita-pwa/offline/native.js').then(module=>module.finishNativePreparation()).catch(fail);}
+    },300);setTimeout(()=>{clearInterval(timer);fail();},45000);return;
   }
   document.addEventListener('click',event=>{
     const button=event.target.closest?.('app-book-reader .reader-header button');

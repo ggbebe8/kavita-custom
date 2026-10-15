@@ -222,6 +222,6 @@ try{
     const button=document.createElement('button');button.textContent='이 책을 오프라인으로 저장';$('library').prepend(button);
     button.onclick=async()=>{button.disabled=true;try{const book=await downloadBook(Number(download),{status});await refreshLibrary();button.remove();await openBook(book.key);}catch(e){error(e);button.disabled=false;}};
   }else if(read&&/^\d+$/.test(read))await openBook(accountKey(read));
-  if(params.has('native-error'))status('기존 리더를 준비하지 못했습니다. 저장한 책과 변경은 유지됩니다. 인터넷 연결 후 읽기를 다시 눌러주세요.');
+  if(params.has('native-error')){const reason=sessionStorage.getItem('kavita-native-error');sessionStorage.removeItem('kavita-native-error');const warning=document.createElement('p');warning.setAttribute('role','alert');warning.textContent='기존 리더를 준비하지 못했습니다. '+(reason||'인터넷 연결 후 읽기를 다시 눌러주세요.')+' 저장한 책과 변경은 유지됩니다.';warning.style.cssText='padding:12px;border:1px solid #d66;border-radius:6px';$('library').prepend(warning);status('저장한 책을 다시 열어 시도할 수 있습니다.');}
   if(navigator.onLine)void sync();
 }catch(e){error(e);}

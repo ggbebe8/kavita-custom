@@ -25,11 +25,11 @@ const server=http.createServer((req,res)=>{
   await page.waitForFunction(()=>location.search==='?kv-offline=1'||(document.getElementById('status')?.textContent.includes('못했')||document.getElementById('status')?.textContent.includes('실패')),{},{timeout:180000});
   if(!page.url().includes('kv-offline=1'))throw new Error(await page.locator('#status').textContent());
   await context.setOffline(true);
-  await page.waitForSelector('app-book-reader .book-content p',{timeout:45000});
+  await page.waitForSelector('app-book-reader .book-content',{timeout:45000});
   await page.waitForTimeout(1800);
   const info=await page.evaluate(async chapter=>{const s=await import('/kavita-pwa/offline/store.js');const b=await s.get('books',s.accountKey(chapter));return {sections:b.sections.length,ready:b.native?.ready,responses:Object.keys((await s.get('states',s.accountKey(chapter))).nativeResponses||b.native?.responses||{}).length};},chapter);
   assert.ok(info.ready);assert.ok(info.responses>5);
-  await context.setOffline(true);const offlineResponse=await page.reload();assert.match(offlineResponse.headers()['content-security-policy']||'',/frame-ancestors 'none'/);await page.waitForSelector('app-book-reader .book-content p',{timeout:45000});
+  await context.setOffline(true);const offlineResponse=await page.reload();assert.match(offlineResponse.headers()['content-security-policy']||'',/frame-ancestors 'none'/);await page.waitForSelector('app-book-reader .book-content',{timeout:45000});
   await page.waitForTimeout(2000);
   const saved=await page.evaluate(async chapter=>{const s=await import('/kavita-pwa/offline/store.js');return s.get('states',s.accountKey(chapter));},chapter);
   assert.ok(saved.dirty,'Original Angular reader saves progress offline');
@@ -39,7 +39,7 @@ const server=http.createServer((req,res)=>{
   await page.locator('.reader-header button').filter({has:page.locator('.fa-bars')}).click();
   await page.waitForSelector('app-reader-settings,app-book-reader-settings,app-epub-reader-settings,.offcanvas.show,.drawer',{timeout:15000});
   const fontValue=await page.locator('#fontsize').evaluate(input=>{const value=Number(input.value)>=290?Number(input.value)-10:Number(input.value)+10;input.value=String(value);input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));return value;});
-  await page.waitForFunction(async value=>{const s=await import('/kavita-pwa/offline/store.js'),state=await s.get('states',s.accountKey(2));return Object.entries(state.nativeResponses||{}).some(([key,r])=>key.startsWith('/api/reading-profile/')&&JSON.parse(r.body).bookReaderFontSize===value);},fontValue,{timeout:10000});
+  await page.waitForFunction(async({value,chapter})=>{const s=await import('/kavita-pwa/offline/store.js'),state=await s.get('states',s.accountKey(chapter));return Object.entries(state.nativeResponses||{}).some(([key,r])=>key.startsWith('/api/reading-profile/')&&JSON.parse(r.body).bookReaderFontSize===value);},{value:fontValue,chapter},{timeout:10000});
   await page.locator('.offcanvas-header button').last().click();
   await page.waitForSelector('app-reader-settings',{state:'hidden'});
   await page.evaluate(()=>{if(!document.querySelector('.reader-header')){const content=document.querySelector('.book-content');content.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,clientX:0,clientY:0}));content.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:0,clientY:0}));}});
@@ -52,12 +52,12 @@ const server=http.createServer((req,res)=>{
   await page.evaluate(()=>window.__kavitaTurnPage(document.querySelector('app-book-reader'),1,'test'));
   await page.waitForTimeout(1200);
   assert.ok(await page.locator('app-book-reader').count());
-  const imageCheck=await page.evaluate(async()=>{
-    const s=await import('/kavita-pwa/offline/store.js'),b=await s.get('books',s.accountKey(2)),asset=b.assets.find(a=>a.blob.type.startsWith('image/'));
-    const html=await(await fetch('/api/book/2/book-page?page=0')).text();
+  const imageCheck=await page.evaluate(async chapter=>{
+    const s=await import('/kavita-pwa/offline/store.js'),b=await s.get('books',s.accountKey(chapter)),asset=b.assets.find(a=>a.blob.type.startsWith('image/'));
+    const html=await(await fetch(`/api/book/${chapter}/book-page?page=0`)).text();
     const imageURL=new DOMParser().parseFromString(html,'text/html').querySelector('img').src;
     const img=new Image();img.src=imageURL;await new Promise(r=>{img.onload=r;img.onerror=r;});return {local:imageURL.startsWith('blob:'),width:img.naturalWidth};
-  });assert.ok(imageCheck.local);assert.ok(imageCheck.width>0,JSON.stringify(imageCheck));
+  },chapter);assert.ok(imageCheck.local);assert.ok(imageCheck.width>0,JSON.stringify(imageCheck));
   await page.screenshot({path:'/tmp/kavita-native-offline.png'});
   assert.equal(blockedWrites,0);assert.deepEqual(errors,[]);console.log('Real Kavita EPUB download/offline render passed:',JSON.stringify(info),'Original reader, settings/notes drawers, full-book page count, images, offline reload and original CSP passed. No API writes were sent; actual Android touch was not tested.');
  }finally{await browser.close();await new Promise(r=>server.close(r));}
