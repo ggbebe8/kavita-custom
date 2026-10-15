@@ -18,7 +18,7 @@ const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p id="p$
     .bottom-bar{position:fixed;bottom:0;width:100%;height:40px}ngb-modal-window{position:fixed;inset:100px;background:white;z-index:1055}ngb-modal-window input{display:block}
    </style><app-book-reader><div class="reader-container"><div class="reading-section column-layout-1"><div class="book-container immersive"><div class="book-content column-layout-1" style="max-height:360px"></div></div></div></div></app-book-reader>`});
   });
-  await page.goto('http://fixture.test/');await page.evaluate(()=>localStorage.setItem('kavita-user',JSON.stringify({id:11,username:'fixture'})));await page.addScriptTag({content:readFileSync('proxy/swipe.js','utf8')});
+  await page.goto('http://fixture.test/');await page.evaluate(()=>localStorage.setItem('kavita-user',JSON.stringify({id:11,username:'fixture'})));await page.addScriptTag({content:readFileSync(process.env.KAVITA_INDICATOR_SCRIPT||'proxy/swipe.js','utf8')});
   await page.evaluate(()=>{
    const root=document.querySelector('app-book-reader'),content=root.querySelector('.book-content'),section=root.querySelector('.reading-section');window.index=0;window.nativeJumps=[];window.menuToggles=0;
    window.navigate=async index=>{
@@ -71,6 +71,11 @@ const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p id="p$
   const row=await summary.evaluate(node=>{const t=node.getBoundingClientRect(),p=document.querySelector('#kavita-screen-page-indicator').getBoundingClientRect();return {heightDifference:Math.abs((t.top+t.bottom-p.top-p.bottom)/2),gap:p.left-t.right};});
   assert.ok(row.heightDifference<2,'TOC and combined counter share a baseline');assert.ok(row.gap>=0,'TOC does not overlap the combined counter');
   assert.equal(await label.textContent(),`1/${total} (${Math.floor(100/total)}%)`);
+  await page.evaluate(()=>closeMenu());
+  await page.waitForFunction(()=>document.querySelector('#kavita-screen-page-indicator')?.parentElement===document.body);
+  const firstFrame=await page.evaluate(async()=>{openMenu();await new Promise(requestAnimationFrame);return {originalVisible:!!document.querySelector('.bottom-bar a.btn-link').getClientRects().length,inline:!!document.querySelector('#kavita-screen-page-indicator').closest('.bottom-bar')};});
+  assert.deepEqual(firstFrame,{originalVisible:false,inline:true},'custom footer is ready on the first painted frame after leaving immersive mode');
+
   await page.setViewportSize({width:393,height:600});
   const mobile=await summary.evaluate(node=>{const toc=node.querySelector('#kavita-reading-toc'),counter=document.querySelector('#kavita-screen-page-indicator'),previous=toc.textContent;toc.textContent='긴 제목 '.repeat(30);const gap=counter.getBoundingClientRect().left-node.getBoundingClientRect().right;toc.textContent=previous;return {gap,width:node.getBoundingClientRect().width};});
   assert.ok(mobile.width>100);assert.ok(mobile.gap>=0);

@@ -1142,6 +1142,20 @@
     }
     if(!complete&&!failed&&!running)void calculate(root,book,key,generation);
   }
+  // Angular recreates menu DOM when immersive mode ends. MutationObserver
+  // runs before paint; waiting for the periodic geometry check exposes the
+  // original content-file counter for up to 300 ms. Ignore our own footer
+  // changes so this immediate update cannot create an observer feedback loop.
+  const ownedFooter=node=>node.nodeType===1&&node.matches('#kavita-screen-page-indicator,#kavita-reading-summary');
+  const menuNode=node=>node.nodeType===1&&(node.matches('app-book-reader,.reader-header,.bottom-bar')||!!node.querySelector('app-book-reader,.reader-header,.bottom-bar'));
+  new MutationObserver(records=>{
+    if(records.some(record=>{
+      if(record.type==='attributes')return record.target.matches('app-book-reader,.reading-section');
+      const nodes=[...record.addedNodes,...record.removedNodes];
+      if(nodes.some(menuNode))return true;
+      return !!record.target.closest?.('.bottom-bar')&&!record.target.closest('#kavita-screen-page-indicator,#kavita-reading-summary')&&nodes.some(node=>!ownedFooter(node));
+    }))update();
+  }).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
   window.setInterval(update,300);update();
 })();
 
