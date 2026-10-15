@@ -1,9 +1,9 @@
 {
   "install.py": "471db8988e74752c9701e9ae8975223a61a9ff7d9f4b1bc47d1c6ed9ba51dd28",
-  "README.md": "7de5f0e6cb9df65996b7c0e1722972f088cb65cee621054e088f764611028d92",
-  "OFFLINE.md": "ce67f626187ec988918af20ea4603992528f25aa6effee8072e6a4b8d55b1ef5",
+  "README.md": "f550bbb8ad24a398abdf8bab3c81d448a8e22e73a6414dde609a5672543d7f4e",
+  "OFFLINE.md": "ed1530f75f925ded9c5222186ff66578892268b2d9b4450dcaea58866463a80a",
   "images.json": "1ce0765259f71b20473d75cf220a741ab7a27823614345b170cb71ecd58e39bf",
-  "proxy/swipe.js": "41362b153460b5be98a0e621595bd7d72ea17176d3bb2845914f2ca6fd1775ff",
+  "proxy/swipe.js": "d6625f1d03e52210311f0e514be77391c2b53111490bcd95ac398cd767107975",
   "proxy/default.conf": "ced32a3ad7a961c54dd42b2a0611f0e8fe4cb3a0da500a54c614f436b1f908ea",
   "proxy/https.Caddyfile.example": "97134b932561eacec8d9a54cd6550325834c87fc481d4878ab7d771ea613d003",
   "proxy/pwa/SOURCES.md": "2353990615945fc1a7fc50a401584e78c0eef3013c22346b3074e1161d2859d9",
@@ -22,5 +22,5 @@
   "proxy/pwa/offline/offline.css": "77681fb105ea039cb90b34e947f4aa838d56a4b0eb7b6d47d2a454fcd4c2c5d3",
   "proxy/pwa/offline/store.js": "890fd98a949898b0873160e88b034f1f82983ede7a26b3dd4626b93b2fdf4b3a",
   "proxy/pwa/offline/sync.js": "e14c6ccd5dcc4c26c24c8e75100354af6c207e96a1296bfa792a7b3125b64d79",
-  "proxy/pwa/offline/worker.js": "17e08ce3bdb6d1b887e4dbf170edb0e1c5cf67699e82d54da3e98490e85a0ceb"
+  "proxy/pwa/offline/worker.js": "00d60ed97c2ee3af263b754f27cc68181029e240487f1272d082778c407ac9c1"
 }

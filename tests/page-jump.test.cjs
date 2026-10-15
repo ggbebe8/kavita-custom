@@ -48,15 +48,18 @@ const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p id="p$
   assert.ok(counts.every(count=>count>=3));
   await page.evaluate(()=>fetch('/api/book/1/chapters',{headers:{Authorization:'Bearer fixture-only'}}));
   const summary=page.locator('#kavita-reading-summary');
-  await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').textContent.startsWith('첫 목차 · '));
+  await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').getAttribute('aria-label')?.startsWith('첫 목차 · '));
   assert.equal(await label.evaluate(n=>!!n.closest('.bottom-bar')),true,'screen counter replaces the native footer position');
   assert.equal(await page.locator('.bottom-bar a.btn-link').isVisible(),false,'original section counter is hidden');
   assert.equal(await page.locator('.time-left').isVisible(),true,'existing time-left remains available');
-  assert.equal(await summary.textContent(),`첫 목차 · ${Math.floor(100/total)}%`);
+  assert.equal(await summary.getAttribute('aria-label'),`첫 목차 · ${Math.floor(100/total)}%`);
   async function summarySettings(enabled){
-    await page.evaluate(()=>{const drawer=document.createElement('app-epub-setting-drawer');drawer.innerHTML='<app-reader-settings><div class="controls"><input id="fontsize"></div></app-reader-settings>';document.body.append(drawer);});
+    await page.evaluate(()=>{const drawer=document.createElement('app-epub-setting-drawer');drawer.innerHTML='<app-reader-settings><div class="controls" style="color:white"><label style="color:rgb(20,25,30)">글자 크기</label><input id="fontsize"></div></app-reader-settings>';document.body.append(drawer);});
     const control=page.locator('[data-kavita-reading-summary]');await control.waitFor();await control.setChecked(enabled);
-    assert.equal(await control.count(),1);await page.locator('app-epub-setting-drawer').evaluate(n=>n.remove());
+    assert.equal(await control.count(),1);
+    await page.locator('[data-kavita-height-tap-zones]').waitFor();
+    for(const selector of ['[data-kavita-reading-summary]','[data-kavita-height-tap-zones]'])assert.equal(await page.locator(selector).evaluate(n=>getComputedStyle(n.closest('.controls').querySelector('small')).color),'rgb(20, 25, 30)','option descriptions use the native setting label color');
+    await page.locator('app-epub-setting-drawer').evaluate(n=>n.remove());
   }
   await summarySettings(false);await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').hidden);
   assert.equal(await label.isVisible(),true,'option hides only title/progress, keeping page navigation');
@@ -64,16 +67,30 @@ const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p id="p$
   await page.evaluate(()=>localStorage.setItem('kavita-user',JSON.stringify({id:12,username:'other'})));await summary.waitFor();
   await page.evaluate(()=>localStorage.setItem('kavita-user',JSON.stringify({id:11,username:'fixture'})));await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').hidden);
   await summarySettings(true);await summary.waitFor();
+  const layout=await summary.evaluate(node=>{
+    const toc=node.querySelector('#kavita-reading-toc'),progress=node.querySelector('#kavita-reading-progress');
+    const shortFits=toc.scrollWidth===toc.clientWidth,original=toc.textContent;toc.textContent='긴 목차 제목을 위한 가로 공간 확인 '.repeat(12);
+    const t=toc.getBoundingClientRect(),p=progress.getBoundingClientRect(),bar=progress.querySelector('progress');toc.textContent=original;
+    return {shortFits,left:t.left,right:p.right,gap:p.left-t.right,width:t.width,viewport:innerWidth,value:bar.value};
+  });
+  assert.ok(layout.shortFits);assert.ok(layout.left<20);assert.ok(layout.right>layout.viewport-20);assert.ok(layout.gap>=10);assert.ok(layout.width>layout.viewport/2,'long title uses the space left of progress instead of a short fixed width');assert.equal(layout.value,Math.floor(100/total));
+  await page.setViewportSize({width:393,height:600});
+  const mobile=await summary.evaluate(node=>{const toc=node.querySelector('#kavita-reading-toc'),progress=node.querySelector('#kavita-reading-progress');const previous=toc.textContent;toc.textContent='짧은 목차 제목도 자르지 않도록';const shortFits=toc.scrollWidth===toc.clientWidth;toc.textContent='긴 제목 '.repeat(30);const width=toc.getBoundingClientRect().width,gap=progress.getBoundingClientRect().left-toc.getBoundingClientRect().right;toc.textContent=previous;return {shortFits,width,gap};});
+  assert.ok(mobile.shortFits,'moderate TOC title fits on a phone');assert.ok(mobile.width>200,'phone title gets more than the previous narrow half-width');assert.ok(mobile.gap>=10);
+  await page.setViewportSize({width:800,height:600});
+  await page.waitForFunction(total=>document.querySelector('#kavita-screen-page-indicator').textContent===`1 / ${total}`&&!document.querySelector('#kavita-screen-page-indicator').disabled,total);
+
+
 
   async function open(touch=false){if(touch)await label.tap();else await label.click();await input.waitFor();assert.equal(await page.locator('.modal-title').textContent(),'전체 페이지로 이동');assert.equal(await input.getAttribute('max'),String(total))}
   async function jump(number,keyboard=false){await open();await input.fill(String(number));if(keyboard)await input.press('Enter');else await confirm.click();await page.waitForFunction(({number,total})=>document.querySelector('#kavita-screen-page-indicator').textContent===`${number} / ${total}`&&!document.querySelector('#kavita-screen-page-indicator').disabled,{number,total})}
   await open(true);assert.equal(await input.inputValue(),'1');
   for(const value of ['0',String(total+1),'1.5']){await input.fill(value);await confirm.click();assert.equal(await page.locator('ngb-modal-window').count(),1);assert.ok(await page.locator('#kavita-page-jump-validation').textContent());assert.deepEqual(await page.evaluate(()=>nativeJumps),[])}
   await page.locator('ngb-modal-window .btn-secondary').click();await page.waitForTimeout(150);assert.equal(await label.textContent(),`1 / ${total}`);
-  await jump(3,true);assert.match(await summary.textContent(),/^중간 목차 · /);assert.equal(await page.evaluate(()=>index),0,'same-section jump needs no section load');assert.equal(await page.locator('.book-content').evaluate(el=>Math.round(el.scrollLeft/820)),2);
-  slow=true;const target=counts[0]+3;await jump(target);assert.equal(await page.evaluate(()=>index),1);assert.equal(await page.locator('.book-content').evaluate(el=>Math.round(el.scrollLeft/820)),2);assert.equal(await summary.textContent(),`다음 목차 · ${Math.floor(target*100/total)}%`);
+  await jump(3,true);assert.match(await summary.getAttribute('aria-label'),/^중간 목차 · /);assert.equal(await page.evaluate(()=>index),0,'same-section jump needs no section load');assert.equal(await page.locator('.book-content').evaluate(el=>Math.round(el.scrollLeft/820)),2);
+  slow=true;const target=counts[0]+3;await jump(target);assert.equal(await page.evaluate(()=>index),1);assert.equal(await page.locator('.book-content').evaluate(el=>Math.round(el.scrollLeft/820)),2);assert.equal(await summary.getAttribute('aria-label'),`다음 목차 · ${Math.floor(target*100/total)}%`);
   await page.waitForTimeout(300);assert.ok(saves.some(save=>save.pageNum===1&&save.bookScrollId.includes(':2.000000')),'native progress receives exact selected screen');
-  await jump(total);await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').textContent==='마지막 목차 · 100%');assert.equal(await page.evaluate(()=>index),2);await jump(1);assert.equal(await page.evaluate(()=>index),0);
+  await jump(total);await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').getAttribute('aria-label')==='마지막 목차 · 100%');assert.equal(await page.locator('#kavita-reading-progress progress').evaluate(n=>String(n.value)),'100');assert.equal(await page.evaluate(()=>index),2);await jump(1);assert.equal(await page.evaluate(()=>index),0);
   await page.evaluate(()=>closeMenu());await jump(target);assert.equal(await page.locator('.reader-header').count(),0,'immersive menu hidden after jump');
   await open();await page.locator('ngb-modal-window .modal-header button').click();await page.waitForTimeout(150);assert.equal(await page.locator('ngb-modal-window').count(),0);assert.equal(await page.locator('.reader-header').count(),0,'cancel restores immersive menu');
   await open();const jumpCount=await page.evaluate(()=>nativeJumps.length);await page.setViewportSize({width:900,height:600});await input.fill('1');await confirm.click();assert.equal(await page.locator('ngb-modal-window').count(),1);assert.equal(await page.evaluate(()=>nativeJumps.length),jumpCount);assert.match(await page.locator('#kavita-page-jump-validation').textContent(),/설정이 변경/);await input.press('Escape');
