@@ -604,11 +604,16 @@
   const style = document.createElement('style');
   style.textContent = '#kavita-screen-page-indicator { position: fixed; right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(5px + env(safe-area-inset-bottom, 0px)); z-index: 1031; padding: 1px 7px; border: 0; border-radius: 8px; font: 11px/1.4 system-ui,sans-serif; color: #fff; background: rgba(0,0,0,.55); cursor: pointer; user-select: none; white-space: nowrap; } #kavita-screen-page-indicator:disabled { cursor: default; } #kavita-screen-page-indicator:focus-visible { outline: 2px solid #fff; outline-offset: 2px; } #kavita-screen-page-indicator[hidden] { display: none !important; } #kavita-page-jump-message { position: fixed; bottom: 70px; right: 12px; max-width: 85vw; z-index: 1100; padding: 8px 12px; border-radius: 6px; color: #fff; background: #8b2525; font: 13px/1.5 system-ui,sans-serif; }';
   style.textContent += `
+    #kavita-screen-page-indicator.in-native-footer {position:static;left:auto;transform:none;bottom:auto!important;z-index:auto;font:12px/1.4 system-ui,sans-serif;color:inherit;background:transparent;padding:0 4px;border-radius:3px;flex:0 0 auto;margin-left:auto}
     [data-kavita-native-page-label] {display:none!important}
-    #kavita-native-screen-page-number {border:0;background:transparent;color:inherit;font:inherit;padding:0;cursor:pointer;white-space:nowrap}
-    #kavita-native-screen-page-number:disabled {cursor:default}
+    [data-kavita-native-completion] {font-size:0!important}
+    [data-kavita-native-completion] .dot-separator {display:none!important}
+    [data-kavita-native-completion] .time-left {font-size:12px}
     #kavita-reading-summary {position:fixed;left:calc(12px + env(safe-area-inset-left,0px));right:calc(12px + env(safe-area-inset-right,0px));bottom:calc(5px + env(safe-area-inset-bottom,0px));z-index:1031;display:flex;align-items:center;justify-content:space-between;gap:12px;font:11px/1.4 system-ui,sans-serif;pointer-events:none}
     #kavita-reading-toc {flex:0 1 auto;min-width:0;max-width:calc(100% - 110px);padding:1px 7px;border-radius:8px;color:#fff;background:rgba(0,0,0,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    [data-kavita-page-footer] {grid-template-columns:auto minmax(0,1fr) auto!important}
+    [data-kavita-page-footer-center] {display:flex;min-width:0;gap:8px;align-items:center;margin-top:0!important}
+    #kavita-reading-summary.in-native-footer {position:static;left:auto!important;right:auto!important;bottom:auto!important;flex:1 1 auto;min-width:0;display:flex;justify-content:flex-start}
     #kavita-reading-toc {max-width:100%}
     #kavita-reading-summary[hidden] {display:none!important}
   `;
@@ -635,21 +640,24 @@
       control.checked=summaryEnabled();
     }
   }
-  function syncNativePages(root,enabled) {
-    const original=root?.querySelector('.bottom-bar a.btn-link')?.closest('span');
-    let counter=root?.querySelector('#kavita-native-screen-page-number');
-    if(!enabled||!original) {
-      counter?.remove();root?.querySelectorAll('[data-kavita-native-page-label]').forEach(n=>n.removeAttribute('data-kavita-native-page-label'));return;
+  function placePageLabel(root,enabled) {
+    const link=root?.querySelector('.bottom-bar a.btn-link');
+    // Keep Angular's original link (and event handler) for the jump dialog.
+    const original=link?.closest('span')||link;
+    if(enabled&&original) {
+      original.setAttribute('data-kavita-native-page-label','');
+      const completion=original.nextElementSibling;
+      if(completion?.matches('.d-none.d-sm-block'))completion.setAttribute('data-kavita-native-completion','');
+      if(summary.previousElementSibling!==original||label.previousElementSibling!==summary)original.after(summary,label);
+      original.parentElement.setAttribute('data-kavita-page-footer-center','');
+      original.closest('.action-bar')?.setAttribute('data-kavita-page-footer','');
+      label.classList.add('in-native-footer');summary.classList.add('in-native-footer');
+    } else {
+      if(label.parentElement!==document.body||summary.parentElement!==document.body)document.body.append(label,summary);
+      label.classList.remove('in-native-footer');summary.classList.remove('in-native-footer');
+      root?.querySelectorAll('[data-kavita-page-footer],[data-kavita-page-footer-center]').forEach(n=>{n.removeAttribute('data-kavita-page-footer');n.removeAttribute('data-kavita-page-footer-center');});
+      root?.querySelectorAll('[data-kavita-native-page-label],[data-kavita-native-completion]').forEach(n=>{n.removeAttribute('data-kavita-native-page-label');n.removeAttribute('data-kavita-native-completion');});
     }
-    // Preserve the native layout and its original Angular jump handler. Only
-    // replace the content-file counter with the same screen totals as above.
-    original.setAttribute('data-kavita-native-page-label','');
-    if(!counter) {
-      counter=document.createElement('button');counter.id='kavita-native-screen-page-number';counter.type='button';counter.className='btn-link me-1';counter.setAttribute('aria-haspopup','dialog');
-      counter.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();void openPageJump();});original.after(counter);
-    }
-    const text=label.dataset.pages||'계산 중';if(counter.textContent!==text)counter.textContent=text;
-    counter.disabled=label.disabled||label.hidden;counter.title=label.title||'현재 화면 설정으로 계산한 전체 페이지';counter.setAttribute('aria-label',`${text} 페이지. 원하는 전체 페이지로 이동`);
   }
   function tocTitle(g) {
     const entries=tablesOfContents.get(book?.id)||[];
@@ -927,14 +935,9 @@
     return {content, size, vertical, total, current:Math.min(total,Math.max(1,Math.round((offset + size) / size)))};
   }
   function position(root) {
-    let bottom='calc(5px + env(safe-area-inset-bottom,0px))';
-    const bar=root.querySelector('.bottom-bar');
-    if(bar&&visible(bar)) {
-      const rect=bar.getBoundingClientRect();
-      if(rect.bottom>0&&rect.top<innerHeight)bottom=`${Math.max(5,innerHeight-rect.top+3)}px`;
-    }
-    label.style.bottom=bottom;summary.style.bottom=bottom;
+    if(label.classList.contains('in-native-footer'))return;
     const rect=label.getBoundingClientRect();
+    summary.style.bottom='calc(5px + env(safe-area-inset-bottom,0px))';
     summary.style.right=`${Math.max(12,innerWidth-rect.left+8)}px`;
   }
   async function read(path, owner, signal) {
@@ -1099,7 +1102,7 @@
     summary.hidden=true;summarySettings();
     const root=document.querySelector('app-book-reader');
     const paginated=!!root?.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2');
-    syncNativePages(root,paginated);
+    placePageLabel(root,paginated);
     if(!root) {label.hidden=true;resume=null;cancelCalculation();if(book){book=null;signature='';counts=[];generation++;}return;}
     const popup=[...document.querySelectorAll('[role="dialog"],.offcanvas.show,.popover,app-highlight-bar')].some(visible);
     if(popup||!root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2')) {label.hidden=true;return;}
@@ -1137,7 +1140,6 @@
     } else {
       label.textContent=failed?'—':'계산 중';label.dataset.pages=label.textContent;updateSummary(g,null);label.title=failed?'책 전체 페이지 계산 실패. 새로고침 후 다시 시도하세요.':'책 전체 페이지 계산 중';
     }
-    syncNativePages(root,true);
     if(!complete&&!failed&&!running)void calculate(root,book,key,generation);
   }
   window.setInterval(update,300);update();
