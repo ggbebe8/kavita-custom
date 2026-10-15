@@ -888,15 +888,36 @@
     iframe.setAttribute('sandbox','allow-same-origin'); iframe.setAttribute('aria-hidden','true'); iframe.tabIndex=-1;
     iframe.style.cssText = `position:fixed;left:-100000px;top:0;width:${innerWidth}px;height:${innerHeight}px;border:0;pointer-events:none;`;
     document.body.appendChild(iframe);
-    session.dispose=()=>iframe.remove();
+    const localStyles=new Map(),localURLs=[];
+    session.dispose=()=>{iframe.remove();for(const url of localURLs)URL.revokeObjectURL(url);};
     try {
       const doc = iframe.contentDocument;
       doc.documentElement.className=document.documentElement.className;
       doc.documentElement.style.cssText=document.documentElement.style.cssText;
       const base=doc.createElement('base');base.href=document.baseURI;doc.head.appendChild(base);
       const loads=[];
+      const offline=new URLSearchParams(location.search).get('kv-offline')==='1';
+      async function embeddedStyle(original){
+        let text;
+        try{text=[...original.sheet.cssRules].map(rule=>rule.cssText).join('\n');}
+        catch{if(original.tagName==='STYLE')text=original.textContent;else{const r=await nativeFetch(original.href,{signal});if(!r.ok)throw new Error('Stylesheet failed');text=await r.text();}}
+        const baseURL=original.href||document.baseURI;
+        const matches=[...text.matchAll(/url\(\s*(['"]?)(.*?)\1\s*\)/g)];
+        for(const match of matches){
+          const value=match[2];if(!value||/^(blob:|data:|#)/i.test(value))continue;
+          const absolute=new URL(value,baseURL);
+          if(!localStyles.has(absolute.href)){
+            // about:blank measurement frames can bypass a worker's cache. Load
+            // public CSS assets through the controlled parent, then use blobs.
+            let blob;try{if(absolute.origin!==location.origin)throw new Error('External stylesheet asset unavailable offline');const r=await nativeFetch(absolute.href,{signal});blob=r.ok?await r.blob():new Blob([]);}catch(error){if(signal.aborted)throw error;blob=new Blob([]);}
+            const url=URL.createObjectURL(blob);localURLs.push(url);localStyles.set(absolute.href,url);
+          }
+          text=text.split(match[0]).join(`url("${localStyles.get(absolute.href)}")`);
+        }
+        const copy=doc.createElement('style');copy.textContent=text;return copy;
+      }
       for (const original of document.head.querySelectorAll('link[rel="stylesheet"],style')) {
-        const copy=original.cloneNode(true);
+        const copy=offline?await embeddedStyle(original):original.cloneNode(true);
         if(copy.tagName==='LINK') {
           // original.href is resolved against Kavita's <base>, even on deep SPA routes.
           copy.href=original.href;
@@ -984,7 +1005,7 @@
         saveCounts(key, owner);
         await new Promise(resolve=>setTimeout(resolve,0));
       }
-    } catch {if(!signal.aborted&&generation===version)failed=true;}
+    } catch(error) {if(!signal.aborted&&generation===version){failed=true;window.__kavitaPageCalculationError=error.message;}}
     finally {session.controller.abort();session.dispose?.();if(activeCalculation===session)activeCalculation=null;running=false;}
   }
   function update() {

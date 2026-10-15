@@ -33,6 +33,9 @@ const server=http.createServer((req,res)=>{
   await page.waitForTimeout(2000);
   const saved=await page.evaluate(async chapter=>{const s=await import('/kavita-pwa/offline/store.js');return s.get('states',s.accountKey(chapter));},chapter);
   assert.ok(saved.dirty,'Original Angular reader saves progress offline');
+  // Empty measurement frames must not depend on a second network stylesheet
+  // request; routing also disables Chromium's incidental HTTP resource cache.
+  await page.route('**/styles-*.css',route=>route.abort());
   await page.locator('.reader-header button').filter({has:page.locator('.fa-bars')}).click();
   await page.waitForSelector('app-reader-settings,app-book-reader-settings,app-epub-reader-settings,.offcanvas.show,.drawer',{timeout:15000});
   const fontValue=await page.locator('#fontsize').evaluate(input=>{const value=Number(input.value)>=290?Number(input.value)-10:Number(input.value)+10;input.value=String(value);input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));return value;});
@@ -44,7 +47,7 @@ const server=http.createServer((req,res)=>{
 
   await page.waitForSelector('app-view-annotations-drawer',{timeout:15000});
   await page.locator('.offcanvas-header button').last().click();await page.waitForSelector('app-view-annotations-drawer',{state:'hidden'});
-  try{await page.waitForFunction(()=>/^\d+ \/ \d+$/.test(document.getElementById('kavita-screen-page-indicator')?.textContent||''),{},{timeout:45000});}catch(error){console.log('Counter state:',await page.evaluate(()=>({text:document.getElementById('kavita-screen-page-indicator')?.textContent,title:document.getElementById('kavita-screen-page-indicator')?.title,section:document.querySelector('.reading-section')?.className,pending:window.__kavitaNativePending})));throw error;}
+  try{await page.waitForFunction(()=>/^\d+ \/ \d+$/.test(document.getElementById('kavita-screen-page-indicator')?.textContent||'')||document.getElementById('kavita-screen-page-indicator')?.textContent==='—',{},{timeout:45000});if(await page.locator('#kavita-screen-page-indicator').textContent()==='—')throw new Error('Page calculation failed');}catch(error){console.log('Counter state:',await page.evaluate(()=>({text:document.getElementById('kavita-screen-page-indicator')?.textContent,title:document.getElementById('kavita-screen-page-indicator')?.title,section:document.querySelector('.reading-section')?.className,pending:window.__kavitaNativePending,error:window.__kavitaPageCalculationError})));throw error;}
   const original=await page.locator('.book-content').innerText();
   await page.evaluate(()=>window.__kavitaTurnPage(document.querySelector('app-book-reader'),1,'test'));
   await page.waitForTimeout(1200);
