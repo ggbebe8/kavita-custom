@@ -45,14 +45,14 @@ const texts = [12,20,10].map(n => `<style>.book-content p { text-indent: 4px; }<
     await navigate(0);
     const label=page.locator('#kavita-screen-page-indicator');
     if(process.env.KAVITA_EXPECT_CSS_FAILURE) {
-      await page.waitForFunction(()=>document.querySelector('#kavita-screen-page-indicator').textContent==='—');
+      await page.waitForFunction(()=>document.querySelector('#kavita-screen-page-indicator').dataset.pages==='—');
       assert(requests.some(r=>r.path==='/library/1/series/1/book/reader.css'));
       console.log('Reproduced CSS 404 and failed indicator on nested book URL.');return;
     }
-    await page.waitForFunction(expected=>document.querySelector('#kavita-screen-page-indicator').textContent===expected,`1 / ${counts.reduce((a,b)=>a+b,0)}`);
-    assert.equal(await label.textContent(),`1 / ${counts.reduce((a,b)=>a+b,0)}`);
+    await page.waitForFunction(expected=>document.querySelector('#kavita-screen-page-indicator').dataset.pages===expected,`1 / ${counts.reduce((a,b)=>a+b,0)}`);
+    assert.equal(await label.evaluate(n=>n.dataset.pages),`1 / ${counts.reduce((a,b)=>a+b,0)}`);
     const pageRequests=()=>requests.filter(r=>r.path.endsWith('/book-page')).length;
-    const refresh=async()=>{await page.reload();await page.addScriptTag({content:script});await navigate(0);await page.waitForFunction(()=>/^\d+ \/ \d+$/.test(document.querySelector('#kavita-screen-page-indicator').textContent));};
+    const refresh=async()=>{await page.reload();await page.addScriptTag({content:script});await navigate(0);await page.waitForFunction(()=>/^\d+ \/ \d+$/.test(document.querySelector('#kavita-screen-page-indicator').dataset.pages));};
     await page.evaluate(()=>{for(const k of Object.keys(localStorage).filter(k=>k.startsWith('kavita-screen-pages-v2:'))){const v=JSON.parse(localStorage.getItem(k));v.saved=Date.now()-10*24*60*60*1000;localStorage.setItem(k,JSON.stringify(v));}});
     let beforeRequests=pageRequests();await refresh();
     assert.equal(pageRequests()-beforeRequests,1,'Reload reuses persisted totals without fetching other sections');
@@ -66,32 +66,32 @@ const texts = [12,20,10].map(n => `<style>.book-content p { text-indent: 4px; }<
     await page.reload();
     await page.evaluate(()=>{Storage.prototype.getItem=()=>{throw new Error('Storage blocked');};Storage.prototype.setItem=()=>{throw new Error('Storage blocked');};});
     await page.addScriptTag({content:script});beforeRequests=pageRequests();await navigate(0);
-    await page.waitForFunction(()=>/^\d+ \/ \d+$/.test(document.querySelector('#kavita-screen-page-indicator').textContent));
+    await page.waitForFunction(()=>/^\d+ \/ \d+$/.test(document.querySelector('#kavita-screen-page-indicator').dataset.pages));
     assert(pageRequests()-beforeRequests>=texts.length,'Storage unavailable falls back to calculation');
     assert.equal(await page.evaluate(()=>document.querySelectorAll('iframe').length),0);
     const overlaps=await page.evaluate(()=>{const a=document.querySelector('#kavita-screen-page-indicator').getBoundingClientRect(),b=document.querySelector('.bottom-bar').getBoundingClientRect();return a.bottom>b.top&&a.top<b.bottom;});assert.equal(overlaps,true,'calculated pages occupy the native footer');assert.equal(await page.locator('.bottom-bar a.btn-link').isVisible(),false,'native section count hidden');
     // Chapter DOM decoration and attribute ordering are not layout settings.
     await page.evaluate(()=>{const c=document.querySelector('.book-content');c.classList.add('section-loaded');c.style.cssText='font-size:16px;max-height:360px';});
     beforeRequests=pageRequests();await navigate(1,true);
-    await page.waitForFunction(expected=>document.querySelector('#kavita-screen-page-indicator').textContent===expected,`${counts[0]+1} / ${counts.reduce((a,b)=>a+b,0)}`);
+    await page.waitForFunction(expected=>document.querySelector('#kavita-screen-page-indicator').dataset.pages===expected,`${counts[0]+1} / ${counts.reduce((a,b)=>a+b,0)}`);
     assert.equal(pageRequests()-beforeRequests,1,'Section transition reuses totals despite DOM decoration');
     // An actual per-section mismatch corrects that section, without refetching the book.
     texts[1]+='<div>'+('<p>'+('Added section text. '.repeat(20))+'</p>').repeat(12)+'</div>';
     counts=await expected();beforeRequests=pageRequests();await navigate(1,true);
-    await page.waitForFunction(expected=>document.querySelector('#kavita-screen-page-indicator').textContent===expected,`${counts[0]+1} / ${counts.reduce((a,b)=>a+b,0)}`);
+    await page.waitForFunction(expected=>document.querySelector('#kavita-screen-page-indicator').dataset.pages===expected,`${counts[0]+1} / ${counts.reduce((a,b)=>a+b,0)}`);
     assert.equal(pageRequests()-beforeRequests,1,'A section correction preserves every other section count');
 
-    await page.waitForFunction(expected=>document.querySelector('#kavita-screen-page-indicator').textContent===expected,`${counts[0]+1} / ${counts.reduce((a,b)=>a+b,0)}`);
+    await page.waitForFunction(expected=>document.querySelector('#kavita-screen-page-indicator').dataset.pages===expected,`${counts[0]+1} / ${counts.reduce((a,b)=>a+b,0)}`);
     await page.evaluate(()=>{const c=document.querySelector('.book-content');c.scrollLeft=document.querySelector('.reader-container').offsetWidth+20;});
-    await page.waitForFunction(expected=>document.querySelector('#kavita-screen-page-indicator').textContent===expected,`${counts[0]+2} / ${counts.reduce((a,b)=>a+b,0)}`);
+    await page.waitForFunction(expected=>document.querySelector('#kavita-screen-page-indicator').dataset.pages===expected,`${counts[0]+2} / ${counts.reduce((a,b)=>a+b,0)}`);
     await page.evaluate(()=>{document.querySelector('.bottom-bar').remove();});
     await page.waitForTimeout(350);assert.equal(await label.isVisible(),true);
     await page.setViewportSize({width:500,height:600});counts=await expected();await navigate(0);
-    await page.waitForFunction(expected=>document.querySelector('#kavita-screen-page-indicator').textContent===expected,`1 / ${counts.reduce((a,b)=>a+b,0)}`);
+    await page.waitForFunction(expected=>document.querySelector('#kavita-screen-page-indicator').dataset.pages===expected,`1 / ${counts.reduce((a,b)=>a+b,0)}`);
     await page.evaluate(()=>{const c=document.querySelector('.book-content');c.className='book-content column-layout-2';c.style.columnCount='2';document.querySelector('.reading-section').className='reading-section column-layout-2';});
     counts=await expected();await navigate(0);
-    await page.waitForFunction(expected=>document.querySelector('#kavita-screen-page-indicator').textContent===expected,`1 / ${counts.reduce((a,b)=>a+b,0)}`);
-    assert.equal(await page.evaluate(()=>Math.abs((document.querySelector('#kavita-screen-page-indicator').getBoundingClientRect().left+document.querySelector('#kavita-screen-page-indicator').getBoundingClientRect().right)/2-innerWidth/2)<2),true);
+    await page.waitForFunction(expected=>document.querySelector('#kavita-screen-page-indicator').dataset.pages===expected,`1 / ${counts.reduce((a,b)=>a+b,0)}`);
+    assert.equal(await page.evaluate(()=>document.querySelector('#kavita-screen-page-indicator').getBoundingClientRect().right>innerWidth-20),true);
     await page.evaluate(async ()=>{
       const root=document.querySelector('app-book-reader'),c=root.querySelector('.book-content');
       root.querySelector('.book-container').classList.remove('immersive');
@@ -111,6 +111,6 @@ const texts = [12,20,10].map(n => `<style>.book-content p { text-indent: 4px; }<
     assert(requests.some(r=>r.path==='/api/series/chapter'));
     assert(requests.some(r=>r.path==='/reader.css'));
     assert(!requests.some(r=>r.path==='/library/1/series/1/book/reader.css'));
-    console.log('Chromium tests passed: persistent cache hit, corrupt/blocked cache fallback, book revision invalidation, whole-book totals, section transition, screen advance, resize, two-column layout, EPUB CSS, immersive centered display, native footer replacement, popup/exit hiding, authenticated GET only.');
+    console.log('Chromium tests passed: persistent cache hit, corrupt/blocked cache fallback, book revision invalidation, whole-book totals, section transition, screen advance, resize, two-column layout, EPUB CSS, immersive right-aligned display, native footer replacement, popup/exit hiding, authenticated GET only.');
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

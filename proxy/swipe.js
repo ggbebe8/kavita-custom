@@ -599,26 +599,22 @@
   summary.id = 'kavita-reading-summary'; summary.hidden = true;
   summary.setAttribute('aria-live','off');
   const tocLabel=document.createElement('span');tocLabel.id='kavita-reading-toc';
-  const progressGroup=document.createElement('span');progressGroup.id='kavita-reading-progress';
-  const progressBar=document.createElement('progress');progressBar.max=100;progressBar.setAttribute('aria-label','전체 독서 진행률');
-  const progressText=document.createElement('span');
-  progressGroup.append(progressBar,progressText);summary.append(tocLabel,progressGroup);
+  summary.append(tocLabel);
   const summaryPreferences = new Map();
   const style = document.createElement('style');
-  style.textContent = '#kavita-screen-page-indicator { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(5px + env(safe-area-inset-bottom, 0px)); z-index: 1031; padding: 1px 7px; border: 0; border-radius: 8px; font: 11px/1.4 system-ui,sans-serif; color: #fff; background: rgba(0,0,0,.55); cursor: pointer; user-select: none; white-space: nowrap; } #kavita-screen-page-indicator:disabled { cursor: default; } #kavita-screen-page-indicator:focus-visible { outline: 2px solid #fff; outline-offset: 2px; } #kavita-screen-page-indicator[hidden] { display: none !important; } #kavita-page-jump-message { position: fixed; bottom: 70px; right: 12px; max-width: 85vw; z-index: 1100; padding: 8px 12px; border-radius: 6px; color: #fff; background: #8b2525; font: 13px/1.5 system-ui,sans-serif; }';
+  style.textContent = '#kavita-screen-page-indicator { position: fixed; right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(5px + env(safe-area-inset-bottom, 0px)); z-index: 1031; padding: 1px 7px; border: 0; border-radius: 8px; font: 11px/1.4 system-ui,sans-serif; color: #fff; background: rgba(0,0,0,.55); cursor: pointer; user-select: none; white-space: nowrap; } #kavita-screen-page-indicator:disabled { cursor: default; } #kavita-screen-page-indicator:focus-visible { outline: 2px solid #fff; outline-offset: 2px; } #kavita-screen-page-indicator[hidden] { display: none !important; } #kavita-page-jump-message { position: fixed; bottom: 70px; right: 12px; max-width: 85vw; z-index: 1100; padding: 8px 12px; border-radius: 6px; color: #fff; background: #8b2525; font: 13px/1.5 system-ui,sans-serif; }';
   style.textContent += `
-    #kavita-screen-page-indicator.in-native-footer {position:static;left:auto;transform:none;bottom:auto!important;z-index:auto;font:inherit;color:inherit;background:transparent;padding:0 4px;border-radius:3px}
+    #kavita-screen-page-indicator.in-native-footer {position:static;left:auto;transform:none;bottom:auto!important;z-index:auto;font:12px/1.4 system-ui,sans-serif;color:inherit;background:transparent;padding:0 4px;border-radius:3px;flex:0 0 auto;margin-left:auto}
     [data-kavita-native-page-label] {display:none!important}
     [data-kavita-native-completion] {font-size:0!important}
     [data-kavita-native-completion] .dot-separator {display:none!important}
     [data-kavita-native-completion] .time-left {font-size:12px}
     #kavita-reading-summary {position:fixed;left:calc(12px + env(safe-area-inset-left,0px));right:calc(12px + env(safe-area-inset-right,0px));bottom:calc(5px + env(safe-area-inset-bottom,0px));z-index:1031;display:flex;align-items:center;justify-content:space-between;gap:12px;font:11px/1.4 system-ui,sans-serif;pointer-events:none}
     #kavita-reading-toc {flex:0 1 auto;min-width:0;max-width:calc(100% - 110px);padding:1px 7px;border-radius:8px;color:#fff;background:rgba(0,0,0,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    #kavita-reading-progress {flex:0 0 auto;margin-left:auto;display:flex;align-items:center;gap:5px;padding:1px 7px;border-radius:8px;color:#fff;background:rgba(0,0,0,.65);white-space:nowrap;font-variant-numeric:tabular-nums}
-    #kavita-reading-progress progress {appearance:none;-webkit-appearance:none;width:56px;height:5px;border:0;border-radius:3px;overflow:hidden;background:#ffffff55;color:#71dfb1}
-    #kavita-reading-progress progress::-webkit-progress-bar {background:#ffffff55;border-radius:3px}
-    #kavita-reading-progress progress::-webkit-progress-value {background:#71dfb1;border-radius:3px}
-    #kavita-reading-progress progress::-moz-progress-bar {background:#71dfb1;border-radius:3px}
+    [data-kavita-page-footer] {grid-template-columns:auto minmax(0,1fr) auto!important}
+    [data-kavita-page-footer-center] {display:flex;min-width:0;gap:8px;align-items:center;margin-top:0!important}
+    #kavita-reading-summary.in-native-footer {position:static;left:auto!important;right:auto!important;bottom:auto!important;flex:1 1 auto;min-width:0;display:flex;justify-content:flex-start}
+    #kavita-reading-toc {max-width:100%}
     #kavita-reading-summary[hidden] {display:none!important}
   `;
   document.head.appendChild(style); document.body.append(label,summary);
@@ -636,7 +632,7 @@
       let control=settings.querySelector('[data-kavita-reading-summary]');
       if(!control) {
         const holder=document.createElement('div');holder.className='controls my-3';
-        holder.innerHTML='<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-reading-summary><span class="form-check-label">목차·진행률 표시</span></label><small class="d-block">좌측 하단에 목차 제목, 우측 하단에 전체 화면 페이지 기준 진행률과 비율 막대를 표시합니다. 설정은 이 브라우저에 저장됩니다.</small>';
+        holder.innerHTML='<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-reading-summary><span class="form-check-label">목차·진행률 표시</span></label><small class="d-block">좌측 하단에 목차 제목을 표시하고, 페이지 숫자에 전체 화면 페이지 기준 진행률(%)을 함께 표시합니다. 설정은 이 브라우저에 저장됩니다.</small>';
         row.after(holder);control=holder.querySelector('input');
         control.addEventListener('change',()=>{const key=summaryKey();summaryPreferences.set(key,control.checked);try{localStorage.setItem(key,String(control.checked));}catch{}update();});
       }
@@ -652,11 +648,14 @@
       original.setAttribute('data-kavita-native-page-label','');
       const completion=original.nextElementSibling;
       if(completion?.matches('.d-none.d-sm-block'))completion.setAttribute('data-kavita-native-completion','');
-      if(label.previousElementSibling!==original)original.after(label);
-      label.classList.add('in-native-footer');
+      if(summary.previousElementSibling!==original||label.previousElementSibling!==summary)original.after(summary,label);
+      original.parentElement.setAttribute('data-kavita-page-footer-center','');
+      original.closest('.action-bar')?.setAttribute('data-kavita-page-footer','');
+      label.classList.add('in-native-footer');summary.classList.add('in-native-footer');
     } else {
-      if(label.parentElement!==document.body)document.body.append(label);
-      label.classList.remove('in-native-footer');
+      if(label.parentElement!==document.body||summary.parentElement!==document.body)document.body.append(label,summary);
+      label.classList.remove('in-native-footer');summary.classList.remove('in-native-footer');
+      root?.querySelectorAll('[data-kavita-page-footer],[data-kavita-page-footer-center]').forEach(n=>{n.removeAttribute('data-kavita-page-footer');n.removeAttribute('data-kavita-page-footer-center');});
       root?.querySelectorAll('[data-kavita-native-page-label],[data-kavita-native-completion]').forEach(n=>{n.removeAttribute('data-kavita-native-page-label');n.removeAttribute('data-kavita-native-completion');});
     }
   }
@@ -680,10 +679,7 @@
     if(summary.hidden)return;
     const title=tocTitle(g),text=percent===null?'계산 중':percent+'%';
     if(tocLabel.textContent!==title)tocLabel.textContent=title;
-    if(progressText.textContent!==text)progressText.textContent=text;
-    tocLabel.title=title;progressGroup.title='전체 독서 진행률 '+text;
-    progressBar.hidden=percent===null;
-    if(percent!==null)progressBar.value=percent;
+    tocLabel.title=title;
     summary.setAttribute('aria-label',`${title} · ${text}`);
   }
 
@@ -840,7 +836,7 @@
     if (!book || book.id !== info.id) {
       book = {id:info.id, index:info.index, html:new Map(), headers:new Headers(headers)};
       cancelCalculation(); signature = ''; counts = []; generation++; failed = false;
-      label.textContent='…';
+      label.textContent='…';label.dataset.pages='…';
     }
     if(book.index!==info.index && resume?.id===book.id)resume=null;
     if(book.index!==info.index || !book.renderAfter)book.renderAfter=performance.now()+120;
@@ -938,14 +934,10 @@
     return {content, size, vertical, total, current:Math.min(total,Math.max(1,Math.round((offset + size) / size)))};
   }
   function position(root) {
-    summary.style.bottom = 'calc(5px + env(safe-area-inset-bottom, 0px))';
-    const bar = root.querySelector('.bottom-bar');
-    if((!bar||!visible(bar))&&visible(label))summary.style.bottom=`${Math.max(5,innerHeight-label.getBoundingClientRect().top+5)}px`;
-    if (bar && visible(bar)) {
-      const rect = bar.getBoundingClientRect();
-      // Above the whole action bar: cannot collide with Page~ text or arrows.
-      if(rect.bottom>0&&rect.top<innerHeight)summary.style.bottom = `${Math.max(5,innerHeight - rect.top + 5)}px`;
-    }
+    if(label.classList.contains('in-native-footer'))return;
+    const rect=label.getBoundingClientRect();
+    summary.style.bottom='calc(5px + env(safe-area-inset-bottom,0px))';
+    summary.style.right=`${Math.max(12,innerWidth-rect.left+8)}px`;
   }
   async function read(path, owner, signal) {
     const controller=new AbortController();
@@ -1115,13 +1107,13 @@
     if(popup||!root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2')) {label.hidden=true;return;}
     if(root.querySelector('.is-loading')||root.classList.contains('swipe-restoring-menu')||(book&&performance.now()<book.renderAfter)) {
       // Keep a known total steady while a section loads; don't flash a calculation placeholder.
-      label.hidden=!/^\d+ \/ \d+$/.test(label.textContent);return;
+      label.hidden=!/^\d+ \/ \d+$/.test(label.dataset.pages||'');return;
     }
     const g=geometry(root);if(!g){label.hidden=true;return;}
     if(document.fonts.status!=='loaded'||[...g.content.querySelectorAll('img')].some(img=>!img.complete))return;
     restoreScreen(root,g);
     position(root);label.hidden=false;
-    if(!book){label.textContent='계산 중';label.title='책 전체 페이지 계산 준비 중';updateSummary(g,null);return;}
+    if(!book){label.textContent='계산 중';label.dataset.pages='계산 중';label.title='책 전체 페이지 계산 준비 중';updateSummary(g,null);return;}
     const css=getComputedStyle(g.content);
     const key=calculationKey(root,g);
     const length=sections.get(book.id);
@@ -1134,7 +1126,9 @@
     const complete=length&&counts.slice(0,length).filter(n=>Number.isInteger(n)&&n>0).length===length;
     if(complete) {
       const before=counts.slice(0,book.index).reduce((sum,n)=>sum+n,0),total=counts.slice(0,length).reduce((sum,n)=>sum+n,0);
-      label.textContent=`${before+g.current} / ${total}`;
+      const current=before+g.current,percent=Math.min(100,Math.floor(current*100/total));
+      label.dataset.pages=`${current} / ${total}`;
+      label.textContent=`${current}/${total}${summaryEnabled()?' ('+percent+'%)':''}`;
       label.title='현재 화면 설정으로 계산한 책 전체 페이지. 눌러서 원하는 페이지로 이동';
       label.setAttribute('aria-label',`${label.textContent} 페이지. 원하는 페이지로 이동`);
       label.disabled = !!pageJump;
@@ -1143,7 +1137,7 @@
         saveCounts(key, book); label.dataset.cacheSaved = hash(key + JSON.stringify(counts));
       }
     } else {
-      label.textContent=failed?'—':'계산 중';updateSummary(g,null);label.title=failed?'책 전체 페이지 계산 실패. 새로고침 후 다시 시도하세요.':'책 전체 페이지 계산 중';
+      label.textContent=failed?'—':'계산 중';label.dataset.pages=label.textContent;updateSummary(g,null);label.title=failed?'책 전체 페이지 계산 실패. 새로고침 후 다시 시도하세요.':'책 전체 페이지 계산 중';
     }
     if(!complete&&!failed&&!running)void calculate(root,book,key,generation);
   }

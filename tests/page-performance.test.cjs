@@ -27,8 +27,8 @@ const texts=Array.from({length:8},(_,i)=>'<div>'+('<p>Section '+i+' '+('Browser 
     await page.waitForRequest(req=>req.url().includes('book-page?page=1'));
     await page.setViewportSize({width:600,height:600});
     await page.waitForFunction(()=>document.querySelectorAll('iframe').length===0);
-    await page.waitForFunction(()=>/^\d+ \/ \d+$/.test(document.querySelector('#kavita-screen-page-indicator').textContent));
-    assert.notEqual(await page.locator('#kavita-screen-page-indicator').textContent(),'—');
+    await page.waitForFunction(()=>/^\d+ \/ \d+$/.test((document.querySelector('#kavita-screen-page-indicator').dataset.pages??document.querySelector('#kavita-screen-page-indicator').textContent)));
+    assert.notEqual(await page.locator('#kavita-screen-page-indicator').evaluate(n=>n.dataset.pages??n.textContent),'—');
     // A fresh uncached setup starts again; leaving the reader cancels it too.
     await page.setViewportSize({width:650,height:600});
     await page.waitForFunction(()=>document.querySelectorAll('iframe').length===1);
@@ -38,8 +38,8 @@ const texts=Array.from({length:8},(_,i)=>'<div>'+('<p>Section '+i+' '+('Browser 
     assert.equal(await page.locator('#kavita-screen-page-indicator').isVisible(),false);
     assert.deepEqual(errors,[]);await context.close();return;
    }
-   await page.waitForFunction(()=>/^\d+ \/ \d+$/.test(document.querySelector('#kavita-screen-page-indicator').textContent));
-   const result={milliseconds:Date.now()-start,cssLoads:css,maxParallelPageGets:maxActive,pageGets,total:await page.locator('#kavita-screen-page-indicator').textContent()};
+   await page.waitForFunction(()=>/^\d+ \/ \d+$/.test((document.querySelector('#kavita-screen-page-indicator').dataset.pages??document.querySelector('#kavita-screen-page-indicator').textContent)));
+   const result={milliseconds:Date.now()-start,cssLoads:css,maxParallelPageGets:maxActive,pageGets,total:await page.locator('#kavita-screen-page-indicator').evaluate(n=>n.dataset.pages??n.textContent)};
    assert.equal(await page.locator('iframe').count(),0);assert.deepEqual(errors,[]);
    await context.close();return result;
   }

@@ -13,11 +13,11 @@ const sections=[8,13,10].map(n=>`<div>${Array.from({length:n},()=>'<p>'+('Saved 
  await page.goto('http://fixture.test/library/1/series/1/book/1?kv-offline=1');blockCSS=true;
  await page.addScriptTag({content:source});
  await page.evaluate(async()=>{const html=await(await fetch('/api/book/1/book-page?page=0',{headers:{Authorization:'Bearer fixture'}})).text();document.querySelector('.book-content').innerHTML=html;});
- await page.waitForFunction(()=>/^(?:\d+ \/ \d+|—)$/.test(document.querySelector('#kavita-screen-page-indicator').textContent),{},{timeout:10000});
- const label=await page.locator('#kavita-screen-page-indicator').textContent();
+ await page.waitForFunction(()=>/^(?:\d+ \/ \d+|—)$/.test(document.querySelector('#kavita-screen-page-indicator').dataset.pages),{},{timeout:10000});
+ const label=await page.locator('#kavita-screen-page-indicator').evaluate(n=>n.dataset.pages);
  if(process.env.KAVITA_EXPECT_STYLES_FAILURE){assert.equal(label,'—');assert.ok(rejected);console.log('Reproduced previous offline measurement failure when a frame refetched CSS.');return;}
  assert.match(label,/^\d+ \/ \d+$/);assert.equal(rejected,0,'measurement uses the loaded stylesheet instead of refetching it');
  await page.evaluate(()=>document.querySelector('.book-content').style.fontSize='20px');
- await page.waitForTimeout(1000);assert.match(await page.locator('#kavita-screen-page-indicator').textContent(),/^\d+ \/ \d+$/);assert.equal(rejected,0);
+ await page.waitForTimeout(1000);assert.match(await page.locator('#kavita-screen-page-indicator').evaluate(n=>n.dataset.pages),/^\d+ \/ \d+$/);assert.equal(rejected,0);
  console.log('Offline pagination styles passed: loaded CSS retained with network CSS blocked, including font-size recalculation.');
  }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -25,7 +25,7 @@ const script=readFileSync('proxy/swipe.js','utf8');
    });
   }
   async function save(){await page.evaluate(()=>new Promise(resolve=>{const x=new XMLHttpRequest();x.open('POST','/api/reader/progress');x.setRequestHeader('Content-Type','application/json');x.onload=resolve;x.send(JSON.stringify({libraryId:1,seriesId:1,volumeId:1,chapterId:1,pageNum:0,bookScrollId:'//body/p[1]'}));}));}
-  await start();await page.waitForFunction(()=>document.querySelector('#kavita-screen-page-indicator').textContent.includes(' / '));
+  await start();await page.waitForFunction(()=>document.querySelector('#kavita-screen-page-indicator').dataset.pages.includes(' / '));
   await page.evaluate(()=>{document.querySelector('.book-content').scrollLeft=3*820;});await save();
   assert.match(progress.bookScrollId,/\[boolean\('kvscreen1:[0-9a-f-]+:3\.000000'\)\]$/);
   assert.equal(await page.evaluate(path=>{const d=new DOMParser().parseFromString('<p>paragraph</p>','text/html');return d.evaluate(path,d,null,XPathResult.FIRST_ORDERED_NODE_TYPE,null).singleNodeValue.tagName;},progress.bookScrollId),'P');
