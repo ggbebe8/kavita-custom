@@ -17,7 +17,7 @@
       event.preventDefault();event.stopPropagation();if(active?.button===button){close();return;}close();
       const tip=document.createElement('div');tip.id=id;tip.className='tooltip show';tip.setAttribute('role','tooltip');tip.style.cssText='position:fixed;z-index:1090;opacity:1;pointer-events:none;max-width:calc(100vw - 24px)';
       const text=document.createElement('div');text.className='tooltip-inner';text.textContent=description.textContent;
-      text.style.cssText='max-width:300px;text-align:left;font:13px/1.5 system-ui,sans-serif;padding:8px 10px;border-radius:6px;color:var(--bs-tooltip-color,#fff);background:var(--bs-tooltip-bg,#000)';tip.append(text);
+      text.style.cssText='max-width:300px;text-align:left;font:13px/1.5 system-ui,sans-serif;padding:8px 10px;border-radius:6px;color:#fff!important;background:var(--bs-tooltip-bg,#000)';tip.append(text);
       (document.fullscreenElement||document.body).append(tip);
       const anchor=button.getBoundingClientRect(),rect=tip.getBoundingClientRect();
       tip.style.left=Math.max(12,Math.min(innerWidth-rect.width-12,anchor.left+anchor.width/2-rect.width/2))+'px';
