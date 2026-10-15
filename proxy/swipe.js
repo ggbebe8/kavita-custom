@@ -663,6 +663,13 @@
     const key=summaryKey();if(summaryPreferences.has(key))return summaryPreferences.get(key);
     try {return localStorage.getItem(key)!=='false';}catch{return true;}
   }
+  function immersiveSummaryEnabled() {
+    const key=summaryKey()+':immersive';if(summaryPreferences.has(key))return summaryPreferences.get(key);
+    try {return localStorage.getItem(key)!=='false';}catch{return true;}
+  }
+  function floatingSummaryHidden() {
+    return !label.classList.contains('in-native-footer')&&(!summaryEnabled()||!immersiveSummaryEnabled());
+  }
   function summarySettings() {
     for(const settings of document.querySelectorAll('app-epub-setting-drawer app-reader-settings')) {
       const row=settings.querySelector('#fontsize')?.closest('.controls');if(!row)continue;
@@ -672,9 +679,17 @@
         holder.innerHTML='<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-reading-summary><span class="form-check-label">목차·진행률 표시</span></label><small class="d-block">좌측 하단에 목차 제목을 표시하고, 페이지 숫자에 전체 화면 페이지 기준 진행률(%)을 함께 표시합니다. 끄면 하단바 페이지 숫자만 가운데에 표시하며 집중 모드의 별도 페이지 표시는 숨깁니다. 설정은 이 브라우저에 저장됩니다.</small>';
         row.after(holder);window.__kavitaSettingHelp(holder,'목차·진행률 표시','kavita-help-reading-summary');control=holder.querySelector('input');
         control.addEventListener('change',()=>{const key=summaryKey();summaryPreferences.set(key,control.checked);try{localStorage.setItem(key,String(control.checked));}catch{}update();});
+        const subRow=document.createElement('div');subRow.className='ms-4 mt-2';subRow.setAttribute('data-kavita-reading-summary-suboption','');
+        subRow.innerHTML='<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-reading-summary-immersive><span class="form-check-label">집중 모드에서도 보이기</span></label>';holder.append(subRow);
+        const subControl=subRow.querySelector('input');subControl.addEventListener('change',()=>{const key=summaryKey()+':immersive';summaryPreferences.set(key,subControl.checked);try{localStorage.setItem(key,String(subControl.checked));}catch{}update();});
+
       }
       control.closest('.controls').querySelector('small').style.color=getComputedStyle(row.querySelector('label')||row).color;
       control.checked=summaryEnabled();
+      const subControl=control.closest('.controls').querySelector('[data-kavita-reading-summary-immersive]');
+      subControl.checked=immersiveSummaryEnabled();subControl.disabled=!control.checked;
+      subControl.closest('[data-kavita-reading-summary-suboption]').hidden=!control.checked;
+
     }
   }
   function placePageLabel(root,enabled) {
@@ -1146,12 +1161,12 @@
     if(popup||!root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2')) {label.hidden=true;return;}
     if(root.querySelector('.is-loading')||root.classList.contains('swipe-restoring-menu')||(book&&performance.now()<book.renderAfter)) {
       // Keep a known total steady while a section loads; don't flash a calculation placeholder.
-      label.hidden=!/^\d+ \/ \d+$/.test(label.dataset.pages||'')||(!summaryEnabled()&&!label.classList.contains('in-native-footer'));return;
+      label.hidden=!/^\d+ \/ \d+$/.test(label.dataset.pages||'')||floatingSummaryHidden();return;
     }
     const g=geometry(root);if(!g){label.hidden=true;return;}
     if(document.fonts.status!=='loaded'||[...g.content.querySelectorAll('img')].some(img=>!img.complete))return;
     restoreScreen(root,g);
-    label.hidden=!summaryEnabled()&&!label.classList.contains('in-native-footer');
+    label.hidden=floatingSummaryHidden();
     if(!book){label.textContent='계산 중';label.dataset.pages='계산 중';label.title='책 전체 페이지 계산 준비 중';updateSummary(g,null);return;}
     const css=getComputedStyle(g.content);
     const key=calculationKey(root,g);

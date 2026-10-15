@@ -53,9 +53,13 @@ const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p id="p$
   assert.equal(await page.locator('.bottom-bar a.btn-link').isVisible(),false,'original section counter is hidden');
   assert.equal(await page.locator('.time-left').isVisible(),true,'existing time-left remains available');
   assert.equal(await summary.getAttribute('aria-label'),`첫 목차 · ${Math.floor(100/total)}%`);
-  async function summarySettings(enabled){
+  async function summarySettings(enabled,immersive){
     await page.evaluate(()=>{const drawer=document.createElement('app-epub-setting-drawer');drawer.innerHTML='<app-reader-settings><div class="controls" style="color:white"><label style="color:rgb(20,25,30)">글자 크기</label><input id="fontsize"></div></app-reader-settings>';document.body.append(drawer);});
     const control=page.locator('[data-kavita-reading-summary]');await control.waitFor();await control.setChecked(enabled);
+    const subControl=page.locator('[data-kavita-reading-summary-immersive]');
+    if(enabled){await subControl.waitFor();assert.equal(await subControl.isEnabled(),true);if(immersive!==undefined)await subControl.setChecked(immersive);}
+    else {assert.equal(await subControl.isVisible(),false);assert.equal(await subControl.isDisabled(),true);}
+
     assert.equal(await control.count(),1);
     await page.locator('[data-kavita-height-tap-zones]').waitFor();
     for(const selector of ['[data-kavita-reading-summary]','[data-kavita-height-tap-zones]']) {
@@ -85,6 +89,16 @@ const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p id="p$
   await page.evaluate(()=>localStorage.setItem('kavita-user',JSON.stringify({id:12,username:'other'})));await summary.waitFor();
   await page.evaluate(()=>localStorage.setItem('kavita-user',JSON.stringify({id:11,username:'fixture'})));await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').hidden);
   await summarySettings(true);await summary.waitFor();
+  await summarySettings(true,false);await summary.waitFor();assert.equal(await label.isVisible(),true,'child option does not hide normal footer');
+  assert.equal(await page.evaluate(()=>localStorage.getItem('kavita-reading-summary-v1:11:immersive')),'false');
+  await page.evaluate(()=>closeMenu());await page.waitForFunction(()=>document.querySelector('#kavita-screen-page-indicator')?.hidden);assert.equal(await summary.isVisible(),false,'child option hides title and page/percentage in immersive mode');
+  await page.evaluate(()=>localStorage.setItem('kavita-user',JSON.stringify({id:12,username:'other'})));await label.waitFor();assert.equal(await summary.isVisible(),true,'another account defaults to visible immersive summary');
+  await page.evaluate(()=>localStorage.setItem('kavita-user',JSON.stringify({id:11,username:'fixture'})));await page.waitForFunction(()=>document.querySelector('#kavita-screen-page-indicator')?.hidden);
+  await page.evaluate(()=>openMenu());await summary.waitFor();await summarySettings(false);await summarySettings(true);
+  await page.evaluate(()=>closeMenu());await page.waitForFunction(()=>document.querySelector('#kavita-screen-page-indicator')?.hidden);assert.equal(await summary.isVisible(),false,'child selection survives parent off/on and drawer recreation');
+  await page.evaluate(()=>openMenu());await summary.waitFor();await summarySettings(true,true);
+  await page.evaluate(()=>closeMenu());await label.waitFor();assert.equal(await summary.isVisible(),true,'enabling child restores immersive summary');await page.evaluate(()=>openMenu());await summary.waitFor();
+
   assert.equal(await page.locator('#kavita-reading-progress, #kavita-reading-summary progress').count(),0,'separate percentage and progress bar are removed');
   const row=await summary.evaluate(node=>{const t=node.getBoundingClientRect(),p=document.querySelector('#kavita-screen-page-indicator').getBoundingClientRect();return {heightDifference:Math.abs((t.top+t.bottom-p.top-p.bottom)/2),gap:p.left-t.right};});
   assert.ok(row.heightDifference<2,'TOC and combined counter share a baseline');assert.ok(row.gap>=0,'TOC does not overlap the combined counter');
