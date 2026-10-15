@@ -604,16 +604,8 @@
   const style = document.createElement('style');
   style.textContent = '#kavita-screen-page-indicator { position: fixed; right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(5px + env(safe-area-inset-bottom, 0px)); z-index: 1031; padding: 1px 7px; border: 0; border-radius: 8px; font: 11px/1.4 system-ui,sans-serif; color: #fff; background: rgba(0,0,0,.55); cursor: pointer; user-select: none; white-space: nowrap; } #kavita-screen-page-indicator:disabled { cursor: default; } #kavita-screen-page-indicator:focus-visible { outline: 2px solid #fff; outline-offset: 2px; } #kavita-screen-page-indicator[hidden] { display: none !important; } #kavita-page-jump-message { position: fixed; bottom: 70px; right: 12px; max-width: 85vw; z-index: 1100; padding: 8px 12px; border-radius: 6px; color: #fff; background: #8b2525; font: 13px/1.5 system-ui,sans-serif; }';
   style.textContent += `
-    #kavita-screen-page-indicator.in-native-footer {position:static;left:auto;transform:none;bottom:auto!important;z-index:auto;font:12px/1.4 system-ui,sans-serif;color:inherit;background:transparent;padding:0 4px;border-radius:3px;flex:0 0 auto;margin-left:auto}
-    [data-kavita-native-page-label] {display:none!important}
-    [data-kavita-native-completion] {font-size:0!important}
-    [data-kavita-native-completion] .dot-separator {display:none!important}
-    [data-kavita-native-completion] .time-left {font-size:12px}
     #kavita-reading-summary {position:fixed;left:calc(12px + env(safe-area-inset-left,0px));right:calc(12px + env(safe-area-inset-right,0px));bottom:calc(5px + env(safe-area-inset-bottom,0px));z-index:1031;display:flex;align-items:center;justify-content:space-between;gap:12px;font:11px/1.4 system-ui,sans-serif;pointer-events:none}
     #kavita-reading-toc {flex:0 1 auto;min-width:0;max-width:calc(100% - 110px);padding:1px 7px;border-radius:8px;color:#fff;background:rgba(0,0,0,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    [data-kavita-page-footer] {grid-template-columns:auto minmax(0,1fr) auto!important}
-    [data-kavita-page-footer-center] {display:flex;min-width:0;gap:8px;align-items:center;margin-top:0!important}
-    #kavita-reading-summary.in-native-footer {position:static;left:auto!important;right:auto!important;bottom:auto!important;flex:1 1 auto;min-width:0;display:flex;justify-content:flex-start}
     #kavita-reading-toc {max-width:100%}
     #kavita-reading-summary[hidden] {display:none!important}
   `;
@@ -640,25 +632,6 @@
       control.checked=summaryEnabled();
     }
   }
-  function placePageLabel(root,enabled) {
-    const link=root?.querySelector('.bottom-bar a.btn-link');
-    // Keep Angular's original link (and event handler) for the jump dialog.
-    const original=link?.closest('span')||link;
-    if(enabled&&original) {
-      original.setAttribute('data-kavita-native-page-label','');
-      const completion=original.nextElementSibling;
-      if(completion?.matches('.d-none.d-sm-block'))completion.setAttribute('data-kavita-native-completion','');
-      if(summary.previousElementSibling!==original||label.previousElementSibling!==summary)original.after(summary,label);
-      original.parentElement.setAttribute('data-kavita-page-footer-center','');
-      original.closest('.action-bar')?.setAttribute('data-kavita-page-footer','');
-      label.classList.add('in-native-footer');summary.classList.add('in-native-footer');
-    } else {
-      if(label.parentElement!==document.body||summary.parentElement!==document.body)document.body.append(label,summary);
-      label.classList.remove('in-native-footer');summary.classList.remove('in-native-footer');
-      root?.querySelectorAll('[data-kavita-page-footer],[data-kavita-page-footer-center]').forEach(n=>{n.removeAttribute('data-kavita-page-footer');n.removeAttribute('data-kavita-page-footer-center');});
-      root?.querySelectorAll('[data-kavita-native-page-label],[data-kavita-native-completion]').forEach(n=>{n.removeAttribute('data-kavita-native-page-label');n.removeAttribute('data-kavita-native-completion');});
-    }
-  }
   function tocTitle(g) {
     const entries=tablesOfContents.get(book?.id)||[];
     const view=g.content.getBoundingClientRect();
@@ -676,6 +649,7 @@
   }
   function updateSummary(g,percent) {
     summary.hidden=!summaryEnabled()||label.hidden;
+    position(g.content.closest('app-book-reader'));
     if(summary.hidden)return;
     const title=tocTitle(g),text=percent===null?'계산 중':percent+'%';
     if(tocLabel.textContent!==title)tocLabel.textContent=title;
@@ -934,9 +908,14 @@
     return {content, size, vertical, total, current:Math.min(total,Math.max(1,Math.round((offset + size) / size)))};
   }
   function position(root) {
-    if(label.classList.contains('in-native-footer'))return;
+    let bottom='calc(5px + env(safe-area-inset-bottom,0px))';
+    const bar=root.querySelector('.bottom-bar');
+    if(bar&&visible(bar)) {
+      const rect=bar.getBoundingClientRect();
+      if(rect.bottom>0&&rect.top<innerHeight)bottom=`${Math.max(5,innerHeight-rect.top+3)}px`;
+    }
+    label.style.bottom=bottom;summary.style.bottom=bottom;
     const rect=label.getBoundingClientRect();
-    summary.style.bottom='calc(5px + env(safe-area-inset-bottom,0px))';
     summary.style.right=`${Math.max(12,innerWidth-rect.left+8)}px`;
   }
   async function read(path, owner, signal) {
@@ -1100,8 +1079,7 @@
     label.disabled = true;
     summary.hidden=true;summarySettings();
     const root=document.querySelector('app-book-reader');
-    const paginated=!!root?.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2');
-    placePageLabel(root,paginated);
+
     if(!root) {label.hidden=true;resume=null;cancelCalculation();if(book){book=null;signature='';counts=[];generation++;}return;}
     const popup=[...document.querySelectorAll('[role="dialog"],.offcanvas.show,.popover,app-highlight-bar')].some(visible);
     if(popup||!root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2')) {label.hidden=true;return;}
@@ -1112,7 +1090,7 @@
     const g=geometry(root);if(!g){label.hidden=true;return;}
     if(document.fonts.status!=='loaded'||[...g.content.querySelectorAll('img')].some(img=>!img.complete))return;
     restoreScreen(root,g);
-    position(root);label.hidden=false;
+    label.hidden=false;
     if(!book){label.textContent='계산 중';label.dataset.pages='계산 중';label.title='책 전체 페이지 계산 준비 중';updateSummary(g,null);return;}
     const css=getComputedStyle(g.content);
     const key=calculationKey(root,g);

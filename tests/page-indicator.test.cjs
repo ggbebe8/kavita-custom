@@ -69,7 +69,7 @@ const texts = [12,20,10].map(n => `<style>.book-content p { text-indent: 4px; }<
     await page.waitForFunction(()=>/^\d+ \/ \d+$/.test(document.querySelector('#kavita-screen-page-indicator').dataset.pages));
     assert(pageRequests()-beforeRequests>=texts.length,'Storage unavailable falls back to calculation');
     assert.equal(await page.evaluate(()=>document.querySelectorAll('iframe').length),0);
-    const overlaps=await page.evaluate(()=>{const a=document.querySelector('#kavita-screen-page-indicator').getBoundingClientRect(),b=document.querySelector('.bottom-bar').getBoundingClientRect();return a.bottom>b.top&&a.top<b.bottom;});assert.equal(overlaps,true,'calculated pages occupy the native footer');assert.equal(await page.locator('.bottom-bar a.btn-link').isVisible(),false,'native section count hidden');
+    const overlaps=await page.evaluate(()=>{const a=document.querySelector('#kavita-screen-page-indicator').getBoundingClientRect(),b=document.querySelector('.bottom-bar').getBoundingClientRect();return a.bottom>b.top&&a.top<b.bottom;});assert.equal(overlaps,false,'calculated pages do not cover the native footer');assert.equal(await page.locator('.bottom-bar a.btn-link').isVisible(),true,'native section count remains visible');
     // Chapter DOM decoration and attribute ordering are not layout settings.
     await page.evaluate(()=>{const c=document.querySelector('.book-content');c.classList.add('section-loaded');c.style.cssText='font-size:16px;max-height:360px';});
     beforeRequests=pageRequests();await navigate(1,true);
@@ -111,6 +111,6 @@ const texts = [12,20,10].map(n => `<style>.book-content p { text-indent: 4px; }<
     assert(requests.some(r=>r.path==='/api/series/chapter'));
     assert(requests.some(r=>r.path==='/reader.css'));
     assert(!requests.some(r=>r.path==='/library/1/series/1/book/reader.css'));
-    console.log('Chromium tests passed: persistent cache hit, corrupt/blocked cache fallback, book revision invalidation, whole-book totals, section transition, screen advance, resize, two-column layout, EPUB CSS, immersive right-aligned display, native footer replacement, popup/exit hiding, authenticated GET only.');
+    console.log('Chromium tests passed: persistent cache hit, corrupt/blocked cache fallback, book revision invalidation, whole-book totals, section transition, screen advance, resize, two-column layout, EPUB CSS, immersive right-aligned display, native footer preserved without overlap, popup/exit hiding, authenticated GET only.');
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

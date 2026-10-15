@@ -49,8 +49,8 @@ const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p id="p$
   await page.evaluate(()=>fetch('/api/book/1/chapters',{headers:{Authorization:'Bearer fixture-only'}}));
   const summary=page.locator('#kavita-reading-summary');
   await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary').getAttribute('aria-label')?.startsWith('첫 목차 · '));
-  assert.equal(await label.evaluate(n=>!!n.closest('.bottom-bar')),true,'screen counter replaces the native footer position');
-  assert.equal(await page.locator('.bottom-bar a.btn-link').isVisible(),false,'original section counter is hidden');
+  assert.equal(await label.evaluate(n=>!!n.closest('.bottom-bar')),false,'screen counter stays separate from the native footer');
+  assert.equal(await page.locator('.bottom-bar a.btn-link').isVisible(),true,'original section counter remains visible');
   assert.equal(await page.locator('.time-left').isVisible(),true,'existing time-left remains available');
   assert.equal(await summary.getAttribute('aria-label'),`첫 목차 · ${Math.floor(100/total)}%`);
   async function summarySettings(enabled){
