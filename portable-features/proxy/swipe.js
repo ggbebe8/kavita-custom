@@ -636,7 +636,8 @@
   const summary = document.createElement('div');
   summary.id = 'kavita-reading-summary'; summary.hidden = true;
   summary.setAttribute('aria-live','off');
-  const tocLabel=document.createElement('span');tocLabel.id='kavita-reading-toc';
+  const tocLabel=document.createElement('button');tocLabel.id='kavita-reading-toc';
+  tocLabel.type='button';tocLabel.setAttribute('aria-haspopup','dialog');
   summary.append(tocLabel);
   const summaryPreferences = new Map();
   const style = document.createElement('style');
@@ -648,14 +649,16 @@
     [data-kavita-native-completion] .dot-separator {display:none!important}
     [data-kavita-native-completion] .time-left {font-size:12px}
     #kavita-reading-summary {position:fixed;left:calc(12px + env(safe-area-inset-left,0px));right:calc(12px + env(safe-area-inset-right,0px));bottom:calc(5px + env(safe-area-inset-bottom,0px));z-index:1031;display:flex;align-items:center;justify-content:space-between;gap:12px;font:11px/1.4 system-ui,sans-serif;pointer-events:none}
-    #kavita-reading-toc {flex:0 1 auto;min-width:0;max-width:calc(100% - 110px);padding:1px 7px;border-radius:8px;color:#fff;background:rgba(0,0,0,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #kavita-reading-toc {appearance:none;-webkit-appearance:none;border:0;outline:none;font:inherit;line-height:inherit;flex:0 1 auto;min-width:0;max-width:calc(100% - 110px);padding:1px 7px;border-radius:8px;color:#fff;background:rgba(0,0,0,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;pointer-events:auto;user-select:none;text-align:left}
+    #kavita-reading-toc:hover {background:rgba(0,0,0,.8)}
+    #kavita-reading-toc:focus-visible {outline:2px solid #fff;outline-offset:2px}
     [data-kavita-page-footer] {grid-template-columns:auto minmax(0,1fr) auto!important}
     [data-kavita-page-footer-center] {display:flex;min-width:0;gap:8px;align-items:center;margin-top:0!important}
     [data-kavita-page-footer-center].kv-page-only {justify-content:center!important;position:relative}
     [data-kavita-page-footer-center].kv-page-only #kavita-screen-page-indicator {margin-left:0}
     [data-kavita-page-footer-center].kv-page-only [data-kavita-native-completion] {position:absolute;right:0;top:50%;transform:translateY(-50%);white-space:nowrap}
     #kavita-reading-summary.in-native-footer {position:static;left:auto!important;right:auto!important;bottom:auto!important;flex:1 1 auto;min-width:0;display:flex;justify-content:flex-start}
-    #kavita-reading-toc {max-width:100%}
+    #kavita-reading-summary.in-native-footer #kavita-reading-toc {max-width:100%}
     #kavita-reading-summary[hidden] {display:none!important}
   `;
   document.head.appendChild(style); document.body.append(label,summary);
@@ -671,6 +674,10 @@
     const key=summaryKey()+':toc';if(summaryPreferences.has(key))return summaryPreferences.get(key);
     try {return localStorage.getItem(key)!=='false';}catch{return true;}
   }
+  function totalPageEnabled() {
+    const key=summaryKey()+':total';if(summaryPreferences.has(key))return summaryPreferences.get(key);
+    try {return localStorage.getItem(key)!=='false';}catch{return true;}
+  }
   function percentEnabled() {
     const key=summaryKey()+':percent';if(summaryPreferences.has(key))return summaryPreferences.get(key);
     try {return localStorage.getItem(key)!=='false';}catch{return true;}
@@ -682,6 +689,9 @@
   function immersiveSummaryEnabled() {
     const key=summaryKey()+':immersive';if(summaryPreferences.has(key))return summaryPreferences.get(key);
     try {return localStorage.getItem(key)!=='false';}catch{return true;}
+  }
+  function pageInfoEnabled() {
+    return !summaryEnabled() || totalPageEnabled() || percentEnabled() || chapterSummaryEnabled();
   }
   function floatingSummaryHidden() {
     return !label.classList.contains('in-native-footer')&&(!summaryEnabled()||!immersiveSummaryEnabled());
@@ -698,6 +708,7 @@
 
         for(const [subKey, name, attr] of [
           [':toc', '목차', 'data-kavita-reading-summary-toc'],
+          [':total', '전체페이지정보', 'data-kavita-reading-summary-total'],
           [':percent', '진행률', 'data-kavita-reading-summary-percent'],
           [':chapter', '진행정보', 'data-kavita-reading-summary-chapter'],
           [':immersive', '집중 모드에서도 보이기', 'data-kavita-reading-summary-immersive']
@@ -712,6 +723,7 @@
       control.checked=summaryEnabled();
       for(const [getter, attr] of [
         [tocEnabled, '[data-kavita-reading-summary-toc]'],
+        [totalPageEnabled, '[data-kavita-reading-summary-total]'],
         [percentEnabled, '[data-kavita-reading-summary-percent]'],
         [chapterSummaryEnabled, '[data-kavita-reading-summary-chapter]'],
         [immersiveSummaryEnabled, '[data-kavita-reading-summary-immersive]']
@@ -758,19 +770,45 @@
     return title||g.content.querySelector('h1,h2,h3')?.textContent.trim()||'목차 없음';
   }
   function updateSummary(g,percent) {
-    summary.hidden=!summaryEnabled()||!tocEnabled()||label.hidden;
+    summary.hidden=!summaryEnabled()||!tocEnabled()||floatingSummaryHidden();
     position(g.content.closest('app-book-reader'));
     if(summary.hidden)return;
     const title=tocTitle(g),text=percent===null?'계산 중':percent+'%';
     if(tocLabel.textContent!==title)tocLabel.textContent=title;
-    tocLabel.title=title;
+    tocLabel.title=`${title} · 목차 열기`;
+    tocLabel.setAttribute('aria-label',`${title} · 목차 열기`);
     summary.setAttribute('aria-label',`${title} · ${text}`);
   }
+  const jumpDelay = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const jumpFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
+  async function openTocMenu() {
+    const root = document.querySelector('app-book-reader');
+    if (!root) return;
+    const openDrawer = document.querySelector('app-view-toc-drawer, .offcanvas.show app-table-of-contents');
+    if (openDrawer) {
+      const closeBtn = document.querySelector('app-view-toc-drawer button, .offcanvas.show button[aria-label*="close" i], .offcanvas.show .btn-close, .offcanvas.show .fa-times')?.closest('button');
+      if (closeBtn) { closeBtn.click(); return; }
+    }
+    let btn = root.querySelector('.reader-header .fa-rectangle-list, .reader-header [class*="fa-rectangle-list"], .reader-header [class*="rectangle-list"]')?.closest('button');
+    if (!btn) {
+      if (!root.querySelector('.reader-header')) {
+        jumpMenu(root);
+        await jumpFrame(); await jumpDelay(50);
+      }
+      btn = root.querySelector('.reader-header .fa-rectangle-list, .reader-header [class*="fa-rectangle-list"], .reader-header [class*="rectangle-list"]')?.closest('button');
+    }
+    if (btn) btn.click();
+  }
+  tocLabel.addEventListener('click', event => {
+    event.preventDefault(); event.stopPropagation();
+    void openTocMenu();
+  });
+  tocLabel.addEventListener('pointerdown', event => {
+    event.stopPropagation();
+  });
 
   const visible = el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden';
   let pageJump = null;
-  const jumpDelay = ms => new Promise(resolve => setTimeout(resolve, ms));
-  const jumpFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
   function jumpMenu(root) {
     const content = root.querySelector('.book-content');
     if (!content) return;
@@ -1191,12 +1229,12 @@
     if(popup||!root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2')) {label.hidden=true;return;}
     if(root.querySelector('.is-loading')||root.classList.contains('swipe-restoring-menu')||(book&&performance.now()<book.renderAfter)) {
       // Keep a known total steady while a section loads; don't flash a calculation placeholder.
-      label.hidden=!/^\d+ \/ \d+$/.test(label.dataset.pages||'')||floatingSummaryHidden();return;
+      label.hidden=!pageInfoEnabled()||!/^\d+ \/ \d+$/.test(label.dataset.pages||'')||floatingSummaryHidden();return;
     }
     const g=geometry(root);if(!g){label.hidden=true;return;}
     if(document.fonts.status!=='loaded'||[...g.content.querySelectorAll('img')].some(img=>!img.complete))return;
     restoreScreen(root,g);
-    label.hidden=floatingSummaryHidden();
+    label.hidden=!pageInfoEnabled()||floatingSummaryHidden();
     if(!book){label.textContent='계산 중';label.dataset.pages='계산 중';label.title='책 전체 페이지 계산 준비 중';updateSummary(g,null);return;}
     const css=getComputedStyle(g.content);
     const key=calculationKey(root,g);
@@ -1212,21 +1250,25 @@
       const before=counts.slice(0,book.index).reduce((sum,n)=>sum+n,0),total=counts.slice(0,length).reduce((sum,n)=>sum+n,0);
       const current=before+g.current,percent=Math.min(100,Math.floor(current*100/total));
       label.dataset.pages=`${current} / ${total}`;
-      let suffix = '';
+      let pageText = '';
       if (summaryEnabled()) {
-        if (percentEnabled()) suffix += `(${percent}%)`;
-        if (chapterSummaryEnabled()) suffix += `(${g.current}/${g.total})`;
+        if (totalPageEnabled()) pageText += `${current}/${total}`;
+        if (percentEnabled()) pageText += `(${percent}%)`;
+        if (chapterSummaryEnabled()) pageText += `(${g.current}/${g.total})`;
+      } else {
+        pageText = `${current}/${total}`;
       }
-      label.textContent=`${current}/${total}${suffix}`;
+      label.textContent=pageText;
+      label.hidden=!pageText||floatingSummaryHidden();
       label.title='현재 화면 설정으로 계산한 책 전체 페이지. 눌러서 원하는 페이지로 이동';
-      label.setAttribute('aria-label',`${label.textContent} 페이지. 원하는 페이지로 이동`);
-      label.disabled = !!pageJump;
+      label.setAttribute('aria-label',`${pageText||'페이지 이동'} 페이지. 원하는 페이지로 이동`);
+      label.disabled = !!pageJump || !pageText;
       updateSummary(g,Math.min(100,Math.floor((before+g.current)*100/total)));
       if (label.dataset.cacheSaved !== hash(key + JSON.stringify(counts))) {
         saveCounts(key, book); label.dataset.cacheSaved = hash(key + JSON.stringify(counts));
       }
     } else {
-      label.textContent=failed?'—':'계산 중';label.dataset.pages=label.textContent;updateSummary(g,null);label.title=failed?'책 전체 페이지 계산 실패. 새로고침 후 다시 시도하세요.':'책 전체 페이지 계산 중';
+      label.textContent=failed?'—':'계산 중';label.dataset.pages=label.textContent;label.hidden=!pageInfoEnabled()||floatingSummaryHidden();updateSummary(g,null);label.title=failed?'책 전체 페이지 계산 실패. 새로고침 후 다시 시도하세요.':'책 전체 페이지 계산 중';
     }
     if(!complete&&!failed&&!running)void calculate(root,book,key,generation);
   }

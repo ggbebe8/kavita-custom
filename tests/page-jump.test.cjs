@@ -28,7 +28,16 @@ const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p id="p$
    window.closeMenu=()=>{root.querySelector('.reader-header')?.remove();root.querySelector('.bottom-bar')?.remove()};
    window.openMenu=()=>{
     if(root.querySelector('.reader-header'))return;
-    const header=document.createElement('div');header.className='reader-header';root.append(header);
+    const header=document.createElement('div');header.className='reader-header';
+    header.innerHTML='<button type="button" class="btn btn-secondary btn-icon me-1"><i class="fa-regular fa-rectangle-list"></i></button>';
+    header.querySelector('button').onclick=()=>{
+     window.tocOpened=(window.tocOpened||0)+1;
+     const drawer=document.createElement('app-view-toc-drawer');drawer.className='offcanvas show';
+     drawer.innerHTML='<div class="offcanvas-header"><button type="button" class="btn-close">Close</button></div>';
+     drawer.querySelector('button').onclick=()=>drawer.remove();
+     document.body.append(drawer);
+    };
+    root.append(header);
     const bar=document.createElement('div');bar.className='bottom-bar';bar.innerHTML='<button><i class="fa-angle-left"></i></button><div class="d-flex mt-2 justify-content-center"><span class="me-1"><a class="btn-link" href="javascript:void(0)">Page 1</a> / 3</span><div class="d-none d-sm-block">0%<span class="time-left">10 min</span></div></div><button><i class="next-page-highlight"></i></button>';root.append(bar);
     bar.querySelector('a').onclick=()=>{
      const modal=document.createElement('ngb-modal-window');modal.setAttribute('role','dialog');modal.innerHTML='<app-confirm-dialog class="confirm-prompt"><div class="modal-header"><h4 class="modal-title">Native page</h4><button type="button">Close</button></div><div class="modal-body"><form><div>Native section count: 3</div><input type="text" formcontrolname="prompt"></form></div><div class="modal-footer"><button type="button" class="btn-secondary">Cancel</button><button type="button" class="btn-primary">OK</button></div></app-confirm-dialog>';
@@ -103,6 +112,36 @@ const sections=[12,20,10].map(n=>`<div>${Array.from({length:n},(_,i)=>`<p id="p$
   const row=await summary.evaluate(node=>{const t=node.getBoundingClientRect(),p=document.querySelector('#kavita-screen-page-indicator').getBoundingClientRect();return {heightDifference:Math.abs((t.top+t.bottom-p.top-p.bottom)/2),gap:p.left-t.right};});
   assert.ok(row.heightDifference<2,'TOC and combined counter share a baseline');assert.ok(row.gap>=0,'TOC does not overlap the combined counter');
   assert.equal(await label.textContent(),`1/${total}(${Math.floor(100/total)}%)(1/${counts[0]})`);
+
+  await page.locator('#kavita-reading-toc').click();
+  await page.waitForSelector('app-view-toc-drawer');
+  assert.equal(await page.evaluate(()=>window.tocOpened),1);
+  await page.locator('app-view-toc-drawer .btn-close').click();
+  await page.waitForSelector('app-view-toc-drawer',{state:'detached'});
+
+  await page.evaluate(()=>closeMenu());
+  await page.waitForFunction(()=>document.querySelector('#kavita-reading-summary')?.parentElement===document.body);
+  await page.locator('#kavita-reading-toc').click();
+  await page.waitForSelector('app-view-toc-drawer');
+  assert.equal(await page.evaluate(()=>window.tocOpened),2);
+  await page.locator('app-view-toc-drawer .btn-close').click();
+  await page.waitForSelector('app-view-toc-drawer',{state:'detached'});
+  await page.evaluate(()=>openMenu());
+
+  await page.evaluate(()=>{const drawer=document.createElement('app-epub-setting-drawer');drawer.innerHTML='<app-reader-settings><div class="controls" style="color:white"><label style="color:rgb(20,25,30)">글자 크기</label><input id="fontsize"></div></app-reader-settings>';document.body.append(drawer);});
+  await page.locator('[data-kavita-reading-summary-total]').setChecked(false);
+  assert.equal(await label.textContent(),`(${Math.floor(100/total)}%)(1/${counts[0]})`);
+  await page.locator('[data-kavita-reading-summary-chapter]').setChecked(false);
+  assert.equal(await label.textContent(),`(${Math.floor(100/total)}%)`);
+  await page.locator('[data-kavita-reading-summary-percent]').setChecked(false);
+  assert.equal(await label.isVisible(),false);
+  assert.equal(await summary.isVisible(),true);
+  await page.locator('[data-kavita-reading-summary-total]').setChecked(true);
+  await page.locator('[data-kavita-reading-summary-percent]').setChecked(true);
+  await page.locator('[data-kavita-reading-summary-chapter]').setChecked(true);
+  assert.equal(await label.textContent(),`1/${total}(${Math.floor(100/total)}%)(1/${counts[0]})`);
+  await page.locator('app-epub-setting-drawer').evaluate(n=>n.remove());
+
   await page.evaluate(()=>closeMenu());
   await page.waitForFunction(()=>document.querySelector('#kavita-screen-page-indicator')?.parentElement===document.body);
   const firstFrame=await page.evaluate(async()=>{openMenu();await new Promise(requestAnimationFrame);return {originalVisible:!!document.querySelector('.bottom-bar a.btn-link').getClientRects().length,inline:!!document.querySelector('#kavita-screen-page-indicator').closest('.bottom-bar')};});
