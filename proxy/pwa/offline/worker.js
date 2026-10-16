@@ -1,6 +1,6 @@
 /* Public application code only is HTTP-cached. Authenticated book data stays
    in account-scoped IndexedDB and is supplied by the requesting reader client. */
-const VERSION='kavita-offline-shell-af357b3286bf395d';
+const VERSION='kavita-offline-shell-ac8ee81bc1fea943';
 const ROOT='/kavita-pwa/offline/';
 const FILES=['index.html','offline.css','app.js','store.js','download.js','sync.js','bridge.js','native.js','native-bootstrap.js'].map(name=>ROOT+name).concat('/kavita-pwa/server-tts.js');
 self.addEventListener('install',event=>event.waitUntil((async()=>{
