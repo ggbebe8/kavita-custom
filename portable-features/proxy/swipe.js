@@ -667,13 +667,21 @@
     const key=summaryKey();if(summaryPreferences.has(key))return summaryPreferences.get(key);
     try {return localStorage.getItem(key)!=='false';}catch{return true;}
   }
-  function immersiveSummaryEnabled() {
-    const key=summaryKey()+':immersive';if(summaryPreferences.has(key))return summaryPreferences.get(key);
+  function tocEnabled() {
+    const key=summaryKey()+':toc';if(summaryPreferences.has(key))return summaryPreferences.get(key);
+    try {return localStorage.getItem(key)!=='false';}catch{return true;}
+  }
+  function percentEnabled() {
+    const key=summaryKey()+':percent';if(summaryPreferences.has(key))return summaryPreferences.get(key);
     try {return localStorage.getItem(key)!=='false';}catch{return true;}
   }
   function chapterSummaryEnabled() {
     const key=summaryKey()+':chapter';if(summaryPreferences.has(key))return summaryPreferences.get(key);
-    try {return localStorage.getItem(key)==='true';}catch{return false;}
+    try {return localStorage.getItem(key)!=='false';}catch{return true;}
+  }
+  function immersiveSummaryEnabled() {
+    const key=summaryKey()+':immersive';if(summaryPreferences.has(key))return summaryPreferences.get(key);
+    try {return localStorage.getItem(key)!=='false';}catch{return true;}
   }
   function floatingSummaryHidden() {
     return !label.classList.contains('in-native-footer')&&(!summaryEnabled()||!immersiveSummaryEnabled());
@@ -684,22 +692,33 @@
       let control=settings.querySelector('[data-kavita-reading-summary]');
       if(!control) {
         const holder=document.createElement('div');holder.className='controls my-3';
-        holder.innerHTML='<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-reading-summary><span class="form-check-label">목차·진행률 표시</span></label><small class="d-block">좌측 하단에 목차 제목을 표시하고, 페이지 숫자에 전체 화면 페이지 기준 진행률(%)을 함께 표시합니다. 끄면 하단바 페이지 숫자만 가운데에 표시하며 집중 모드의 별도 페이지 표시는 숨깁니다. 설정은 이 브라우저에 저장됩니다.</small>';
-        row.after(holder);window.__kavitaSettingHelp(holder,'목차·진행률 표시','kavita-help-reading-summary');control=holder.querySelector('input');
+        holder.innerHTML='<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-reading-summary><span class="form-check-label">하단 정보 표시</span></label><small class="d-block">하단에 목차, 전체 진행률, 현재 장 진행정보를 표시합니다. 끄면 기본 페이지 숫자만 가운데에 표시하며 집중 모드의 별도 표시는 숨깁니다. 설정은 이 브라우저에 저장됩니다.</small>';
+        row.after(holder);window.__kavitaSettingHelp(holder,'하단 정보 표시','kavita-help-reading-summary');control=holder.querySelector('input');
         control.addEventListener('change',()=>{const key=summaryKey();summaryPreferences.set(key,control.checked);try{localStorage.setItem(key,String(control.checked));}catch{}update();});
-        const subRow=document.createElement('div');subRow.className='ms-4 mt-2';subRow.setAttribute('data-kavita-reading-summary-suboption','');
-        subRow.innerHTML='<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-reading-summary-immersive><span class="form-check-label">집중 모드에서도 보이기</span></label>';holder.append(subRow);
-        const subControl=subRow.querySelector('input');subControl.addEventListener('change',()=>{const key=summaryKey()+':immersive';summaryPreferences.set(key,subControl.checked);try{localStorage.setItem(key,String(subControl.checked));}catch{}update();});
-        const chapterRow=document.createElement('div');chapterRow.className='ms-4 mt-2';chapterRow.setAttribute('data-kavita-reading-summary-suboption','');
-        chapterRow.innerHTML='<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-reading-summary-chapter><span class="form-check-label">현재 장 진행정보 함께 표시</span></label>';holder.append(chapterRow);
-        const chapterControl=chapterRow.querySelector('input');chapterControl.addEventListener('change',()=>{const key=summaryKey()+':chapter';summaryPreferences.set(key,chapterControl.checked);try{localStorage.setItem(key,String(chapterControl.checked));}catch{}update();});
+
+        for(const [subKey, name, attr] of [
+          [':toc', '목차', 'data-kavita-reading-summary-toc'],
+          [':percent', '진행률', 'data-kavita-reading-summary-percent'],
+          [':chapter', '진행정보', 'data-kavita-reading-summary-chapter'],
+          [':immersive', '집중 모드에서도 보이기', 'data-kavita-reading-summary-immersive']
+        ]) {
+          const subRow=document.createElement('div');subRow.className='ms-4 mt-2';subRow.setAttribute('data-kavita-reading-summary-suboption','');
+          subRow.innerHTML=`<label class="form-check"><input type="checkbox" class="form-check-input" ${attr}><span class="form-check-label">${name}</span></label>`;holder.append(subRow);
+          const subInput=subRow.querySelector('input');
+          subInput.addEventListener('change',()=>{const key=summaryKey()+subKey;summaryPreferences.set(key,subInput.checked);try{localStorage.setItem(key,String(subInput.checked));}catch{}update();});
+        }
       }
       control.closest('.controls').querySelector('small').style.color=getComputedStyle(row.querySelector('label')||row).color;
       control.checked=summaryEnabled();
-      const subControl=control.closest('.controls').querySelector('[data-kavita-reading-summary-immersive]');
-      if(subControl){subControl.checked=immersiveSummaryEnabled();subControl.disabled=!control.checked;}
-      const chapterControl=control.closest('.controls').querySelector('[data-kavita-reading-summary-chapter]');
-      if(chapterControl){chapterControl.checked=chapterSummaryEnabled();chapterControl.disabled=!control.checked;}
+      for(const [getter, attr] of [
+        [tocEnabled, '[data-kavita-reading-summary-toc]'],
+        [percentEnabled, '[data-kavita-reading-summary-percent]'],
+        [chapterSummaryEnabled, '[data-kavita-reading-summary-chapter]'],
+        [immersiveSummaryEnabled, '[data-kavita-reading-summary-immersive]']
+      ]) {
+        const subControl=control.closest('.controls').querySelector(attr);
+        if(subControl){subControl.checked=getter();subControl.disabled=!control.checked;}
+      }
       control.closest('.controls').querySelectorAll('[data-kavita-reading-summary-suboption]').forEach(el=>{el.hidden=!control.checked;});
     }
   }
@@ -713,7 +732,7 @@
       if(completion?.matches('.d-none.d-sm-block'))completion.setAttribute('data-kavita-native-completion','');
       if(summary.previousElementSibling!==original||label.previousElementSibling!==summary)original.after(summary,label);
       original.parentElement.setAttribute('data-kavita-page-footer-center','');
-      original.parentElement.classList.toggle('kv-page-only',!summaryEnabled());
+      original.parentElement.classList.toggle('kv-page-only',!summaryEnabled()||!tocEnabled());
       original.closest('.action-bar')?.setAttribute('data-kavita-page-footer','');
       label.classList.add('in-native-footer');summary.classList.add('in-native-footer');
     } else {
@@ -739,7 +758,7 @@
     return title||g.content.querySelector('h1,h2,h3')?.textContent.trim()||'목차 없음';
   }
   function updateSummary(g,percent) {
-    summary.hidden=!summaryEnabled()||label.hidden;
+    summary.hidden=!summaryEnabled()||!tocEnabled()||label.hidden;
     position(g.content.closest('app-book-reader'));
     if(summary.hidden)return;
     const title=tocTitle(g),text=percent===null?'계산 중':percent+'%';
@@ -1193,7 +1212,11 @@
       const before=counts.slice(0,book.index).reduce((sum,n)=>sum+n,0),total=counts.slice(0,length).reduce((sum,n)=>sum+n,0);
       const current=before+g.current,percent=Math.min(100,Math.floor(current*100/total));
       label.dataset.pages=`${current} / ${total}`;
-      const suffix = summaryEnabled() ? (chapterSummaryEnabled() ? `(${percent}%,${g.current}/${g.total})` : ` (${percent}%)`) : '';
+      let suffix = '';
+      if (summaryEnabled()) {
+        if (percentEnabled()) suffix += `(${percent}%)`;
+        if (chapterSummaryEnabled()) suffix += `(${g.current}/${g.total})`;
+      }
       label.textContent=`${current}/${total}${suffix}`;
       label.title='현재 화면 설정으로 계산한 책 전체 페이지. 눌러서 원하는 페이지로 이동';
       label.setAttribute('aria-label',`${label.textContent} 페이지. 원하는 페이지로 이동`);
