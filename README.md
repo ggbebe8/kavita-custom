@@ -18,7 +18,7 @@ Android에서 시작한 스와이프 기능을 Windows·Linux 터치 브라우�
 | **전체화면 버튼** | 상단 단축키 아이콘 옆에서 전체화면을 켜고 끕니다. |
 | **PWA·오프라인 책장** | 책 상세 화면에서 EPUB을 저장하고, 오프라인에서도 기존 Kavita 리더로 읽습니다. 저장 완료 상태를 구분하며, 재연결하면 읽기 위치·하이라이트·메모 변경을 동기화하고 충돌을 확인합니다. |
 | **브라우저 TTS** | 브라우저 음성으로 읽으며 현재 문장을 하이라이트합니다. 화면 페이지와 다음 목차 구간을 따라 이어 읽습니다. |
-| **서버 TTS** | CPU에서 음성을 생성해 하나의 연속 MP3로 전달합니다. 빠른 한국어 음성과 Supertonic 3 음성 10개, 속도 조절, 지원 브라우저의 잠금 화면 재생 제어를 제공합니다. |
+| **서버 TTS** | 자연스러운 신경망 음성(Edge-TTS: 선희·인준·현수 등)을 하나의 연속 MP3로 전달합니다. 사람이 책을 읽어주는 듯한 자연스러운 한국어 발음과 억양, 속도 조절, 지원 브라우저의 잠금 화면 재생 제어를 제공합니다. |
 | **리더 동작 보완** | 이미지가 넘쳐 페이지를 넘기지 못하는 문제, 불필요한 북마크 표시, 페이지 이동 시 집중 모드가 풀리는 현상 등을 보완했습니다. |
 
 ## 빠른 설치
@@ -99,6 +99,6 @@ tests/               기능별 회귀 테스트
 
 - [Kavita](https://github.com/Kareadita/Kavita)
 - [Nginx](https://nginx.org/) · [Caddy](https://caddyserver.com/)
-- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) · [Supertonic 3](https://huggingface.co/Supertone/supertonic-3) · [Mimic 3 Korean KSS](https://github.com/MycroftAI/mimic3-voices/tree/master/voices/ko_KO/kss_low)
+- [edge-tts](https://github.com/rany2/edge-tts) · [Microsoft Neural Voices](https://azure.microsoft.com/services/cognitive-services/text-to-speech/) · [FFmpeg](https://ffmpeg.org/)
 
 각 기반 프로젝트와 음성 모델의 라이선스는 해당 원본을 따릅니다.

@@ -1,6 +1,6 @@
 # 서버 TTS 설치·운영·롤백
 
-기존 Kavita 웹 리더와 모든 추가 기능을 유지하고, CPU용 한국어 VITS와 Supertonic 3 음성을 별도 컨테이너에서 생성합니다. Android 앱 설치나 외부 유료 TTS API는 필요하지 않습니다. 브라우저 음성도 선택할 수 있습니다.
+기존 Kavita 웹 리더와 모든 추가 기능을 유지하고, 브라우저급 고품질 신경망 음성(Neural Edge-TTS: 선희, 인준, 현수 등)을 별도 컨테이너에서 생성합니다. Android 앱 설치나 유료 API 키는 필요하지 않으며, 기존 브라우저 음성도 선택할 수 있습니다.
 
 ## 새 환경에 한 번에 설치
 
@@ -23,11 +23,11 @@ python3 portable-features/install.py --target ~/docker/kavita-new \
 
 HTTPS까지 새로 구성하려면 설치 명령에 `--https-domain books.example.com`을 추가합니다. 해당 도메인의 DNS와 80/443 접근을 준비해야 하며, 이미 80/443을 사용하는 프록시가 있다면 옵션을 생략하고 기존 프록시를 계속 사용합니다. HTTPS 옵션을 생략해도 설치·웹 읽기·TTS는 가능하지만 PWA 설치·서비스 워커 오프라인 기능은 보안 컨텍스트(HTTPS 또는 localhost)가 필요합니다.
 
-최초 빌드에는 인터넷과 수 분이 필요합니다. 음성 모델 압축 다운로드는 합계 약 196 MB이며 SHA-256을 검증한 뒤 전용 Docker 볼륨에 저장합니다. 이후 재시작 때 모델을 다시 받지 않습니다. 준비 중에는 브라우저 음성을 사용할 수 있습니다. 서버 음성이 준비되면 읽어주기 창을 다시 열어 선택합니다.
+새 엔진은 모델 파일을 별도로 내려받지 않고 즉시 기동됩니다. 준비 중에는 브라우저 음성을 사용할 수 있으며, 서버 음성이 준비되면 읽어주기 창을 다시 열어 선택합니다.
 
 ## 사용과 동작
 
-온라인 EPUB 리더의 스피커 아이콘 → **서버 음성 · 백그라운드 재생** → 언어·음성·속도 선택 → 재생. 한국어가 기본이며 영어·일본어도 UI에서 선택할 수 있습니다. 기본값은 CPU 사용량이 적은 빠른 한국어 음성이며, 추가로 Supertonic 3 음성 10개를 선택할 수 있습니다. 다른 언어는 Supertonic 음성을 사용합니다.
+온라인 EPUB 리더의 스피커 아이콘 → **서버 음성 · 백그라운드 재생** → 언어·음성·속도 선택 → 재생. 한국어가 기본(선희 · 여성, 인준 · 남성, 현수 · 남성)이며 영어(Jenny, Guy, Aria)·일본어(Nanami, Keita)도 UI에서 선택할 수 있습니다.
 
 서버가 문장 단위로 음성을 만들고 같은 MP3 연결에 이어 보냅니다. 다음 문장·다음 목차 구간을 시작할 때 브라우저 타이머가 필요하지 않습니다. 알림·잠금 화면의 재생/일시정지와 준비된 오디오 범위 내 15초 이동은 Media Session을 지원하는 브라우저에서 사용할 수 있습니다. 제조사 배터리 정책·네트워크 단절·브라우저 강제 종료까지 재생을 보장하지 않으며, 실제 Android 화면 꺼짐 검증은 별도로 합니다.
 
@@ -96,15 +96,13 @@ docker compose -p kavita-custom -f compose.original.yaml up -d kavita
 5. 통화·다른 음악 앱·네트워크 단절 후 동작을 확인합니다. 연결이 끊겼다면 현재 화면에서 재생을 다시 시작합니다.
 6. 브라우저 음성·오프라인 읽기·기존 위치 동기화가 유지되는지 확인합니다.
 
-## 출처
+## 출처 및 엔진
 
-- 모델·Python API: https://k2-fsa.github.io/sherpa/onnx/tts/all/Korean/supertonic-3-ko.html
-- 모델 원본·라이선스: https://huggingface.co/Supertone/supertonic-3
-- 런타임: https://github.com/k2-fsa/sherpa-onnx (Apache-2.0)
+- 엔진 라이브러리: https://github.com/rany2/edge-tts (Python edge-tts)
+- 음성: Microsoft Neural TTS Voices (`ko-KR-SunHiNeural`, `ko-KR-InJoonNeural`, `ko-KR-HyunsuNeural` 등)
+- 런타임 변환: FFmpeg (libmp3lame 64kbps CBR 모노 인코딩)
 
-Supertonic 모델 배포본의 라이선스 파일은 다운로드 폴더에 함께 보관합니다. 빠른 한국어 음성은 Mycroft Mimic 3 KSS 모델의 ONNX 변환본입니다. 원본 정보·사용 조건은 https://github.com/MycroftAI/mimic3-voices/tree/master/voices/ko_KO/kss_low 에서 확인합니다.
-
-서버 음성의 문장 시작·끝은 생성된 MP3 길이를 기준으로 맞춥니다. 문장 내부의 화면 페이지 이동은 재생 시간에 따른 추정이므로 브라우저 TTS의 단어 경계 이벤트와 정확도가 같지는 않습니다. 음질·속도는 선택한 모델과 서버 CPU에 따라 달라지며, 처음 생성하는 음성의 고배속 재생은 버퍼 대기가 생길 수 있습니다.
+서버 음성의 문장 시작·끝은 생성된 MP3 길이를 기준으로 맞춥니다. 문장 내부의 화면 페이지 이동은 재생 시간에 따른 추정이므로 브라우저 TTS의 단어 경계 이벤트와 정확도가 같지는 않습니다. 고품질 신경망 모델을 사용하여 한국어 조사, 어미, 억양이 사람처럼 자연스럽게 낭독됩니다.
 
 ## 이번 서버에서 코드까지 되돌리기
 

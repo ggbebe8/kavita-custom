@@ -1419,14 +1419,25 @@
     sourceSelect=document.createElement('select');sourceSelect.setAttribute('aria-label','읽기 방식');
     sourceSelect.add(new Option('브라우저 음성','browser'));panel.append(sourceSelect);
     voiceSelect=document.createElement('select');voiceSelect.setAttribute('aria-label','읽기 음성');panel.append(voiceSelect);voices();
-    serverVoice=document.createElement('select');serverVoice.setAttribute('aria-label','서버 읽기 음성');serverVoice.hidden=true;
-    serverVoice.add(new Option('빠른 한국어 음성 · 기본','10'));
-    for(let i=0;i<10;i++)serverVoice.add(new Option('서버 음성 '+(i+1),String(i)));panel.append(serverVoice);
+    serverVoice=document.createElement('select');serverVoice.setAttribute('aria-label','서버 읽기 음성');serverVoice.hidden=true;panel.append(serverVoice);
     serverLanguage=document.createElement('select');serverLanguage.setAttribute('aria-label','서버 읽기 언어');serverLanguage.hidden=true;
     for(const [value,name] of [['ko','한국어'],['en','영어'],['ja','일본어']])serverLanguage.add(new Option(name,value));panel.append(serverLanguage);
-    try{const saved=JSON.parse(localStorage.getItem('kavita-server-tts-v1'));if(saved&&['ko','en','ja'].includes(saved.language)&&Number.isInteger(Number(saved.voice))&&Number(saved.voice)>=0&&Number(saved.voice)<=10){serverLanguage.value=saved.language;serverVoice.value=saved.voice;}}catch{}
-    const saveServerVoice=()=>{serverVoice.options[0].disabled=serverLanguage.value!=='ko';if(serverVoice.value==='10'&&serverLanguage.value!=='ko')serverVoice.value='0';try{localStorage.setItem('kavita-server-tts-v1',JSON.stringify({voice:serverVoice.value,language:serverLanguage.value}));}catch{}};
-    saveServerVoice();serverLanguage.addEventListener('change',saveServerVoice);serverVoice.addEventListener('change',saveServerVoice);
+    const voiceNames={
+      ko:[['10','선희 (여성 · 기본)'],['1','인준 (남성)'],['2','현수 (남성)']],
+      en:[['0','Jenny (여성 · 기본)'],['1','Guy (남성)'],['2','Aria (여성)']],
+      ja:[['0','Nanami (여성 · 기본)'],['1','Keita (남성)']]
+    };
+    const populateServerVoices=()=>{
+      const lang=serverLanguage.value||'ko',current=serverVoice.value;
+      serverVoice.replaceChildren();
+      for(const [val,label] of (voiceNames[lang]||voiceNames.ko))serverVoice.add(new Option(label,val));
+      if([...serverVoice.options].some(o=>o.value===current))serverVoice.value=current;
+      else serverVoice.value=serverVoice.options[0].value;
+    };
+    try{const saved=JSON.parse(localStorage.getItem('kavita-server-tts-v1'));if(saved&&['ko','en','ja'].includes(saved.language)){serverLanguage.value=saved.language;if(saved.voice)serverVoice.value=String(saved.voice);}}catch{}
+    populateServerVoices();
+    const saveServerVoice=()=>{try{localStorage.setItem('kavita-server-tts-v1',JSON.stringify({voice:serverVoice.value,language:serverLanguage.value}));}catch{}};
+    serverLanguage.addEventListener('change',()=>{populateServerVoices();saveServerVoice();});serverVoice.addEventListener('change',saveServerVoice);
     const updateSource=()=>{const selected=serverSelected();voiceSelect.hidden=selected;serverVoice.hidden=!selected;serverLanguage.hidden=!selected;explanation.textContent=selected?'서버에서 음성을 만들어 연속 재생합니다. 화면을 꺼도 재생하도록 구성했으며 실제 지속 여부는 기기에서 확인하세요. 서버 연결이 필요합니다.':'기기·브라우저 음성으로 읽습니다. 화면을 끄면 중단될 수 있습니다.';try{localStorage.setItem('kavita-tts-source',sourceSelect.value);}catch{}};
     sourceSelect.addEventListener('change',()=>{if(session)stop();serverTts?.stop();updateSource();});
     void loadServer().then(async module=>{

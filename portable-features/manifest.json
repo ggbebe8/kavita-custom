@@ -2,9 +2,9 @@
   "install.py": "34687099af21aee0bafbba6171e61ae1a6c8ad1377d323e656faeb3b2d189c1f",
   "README.md": "0ce116e472e4db731e1e6371e6168c26c7ce1664f98ce4f5a3c310f0d3805aca",
   "OFFLINE.md": "99a31230bb870c4d39bb85c92cae63f56001ce0978fe53b1134839f99e001896",
-  "SERVER-TTS.md": "37cb1699e6b93501c843a843407421dd030591b5e5b1d9bcf4d23f9edcca9d1d",
+  "SERVER-TTS.md": "14f5ae2de1f8e215da84c49e4c23196f3b8c317f2261ba9860b8e3d20868e75d",
   "images.json": "ad539d4a18f66138cfb81a1993b8757a36074e4b064807604bb47cb4c66f2500",
-  "proxy/swipe.js": "e4bbfbf866b0efe7224b3b973f75b2507981c7b9a40b0c0ace3e1e9d16bf9a93",
+  "proxy/swipe.js": "4e0976fc3635067ddc4917b5d7f8b03e2f2bac141436e2a14c6e59bcbd1f525b",
   "proxy/default.conf": "bffd6145bd9507a18e209b730b7201056b78302bce643812ab5193a87f1513cc",
   "proxy/https.Caddyfile.example": "97134b932561eacec8d9a54cd6550325834c87fc481d4878ab7d771ea613d003",
   "proxy/pwa/SOURCES.md": "2353990615945fc1a7fc50a401584e78c0eef3013c22346b3074e1161d2859d9",
@@ -23,11 +23,11 @@
   "proxy/pwa/offline/offline.css": "77681fb105ea039cb90b34e947f4aa838d56a4b0eb7b6d47d2a454fcd4c2c5d3",
   "proxy/pwa/offline/store.js": "890fd98a949898b0873160e88b034f1f82983ede7a26b3dd4626b93b2fdf4b3a",
   "proxy/pwa/offline/sync.js": "e14c6ccd5dcc4c26c24c8e75100354af6c207e96a1296bfa792a7b3125b64d79",
-  "proxy/pwa/offline/worker.js": "94b2bbbdb5c03ae1a61fd07e62468726354aa5555e4b1cc334fe479dd141e7bb",
+  "proxy/pwa/offline/worker.js": "bac1d179f58dce1747a03bf7287f8c0cf2be67288e369958d2feb3b9443de852",
   "proxy/pwa/server-tts.js": "7421f06002b86815bb8943ada6ab03549213d3e0657900e5b61b43cb58b78578",
   "tts/.dockerignore": "fefb571d14eddd7ecfa8741601ccd6bcf1bc73cb615052f4d6a76742a3f8315e",
-  "tts/Dockerfile": "db730b954678de38c76ae3b68fb3360d1676fb3d92463a26b5bec80dd4904fb8",
-  "tts/model.py": "29de3120c421c2f69d161d2fd6947ab5c96a8f5fdc654c756e9f3e83eb375a00",
-  "tts/requirements.txt": "a26cbd23aa0ac1c15d772b2c1c45dc0f05e88262ff1814980a8c552ce1d6250d",
-  "tts/server.py": "982294f3d036362e484b7bc26d9cee8a568cd6e3a6f6c22de531aeb0c36f454a"
+  "tts/Dockerfile": "e0371557759b9a5556519601f63a6e8bd43375f18b74c5a2646644b015ae4b96",
+  "tts/model.py": "893a31fec69e77fca69ac383f7eab33d04fc4fa487be7147443f55b493f52047",
+  "tts/requirements.txt": "12cd3fff7ed12872422b9716c08eb7b7fc55cfc7ad9fc110286d482974b936e8",
+  "tts/server.py": "9f81a7dc8829330dac4612a301b002b969ac3c7e9bf36a43d8ed961cdf7a2f48"
 }

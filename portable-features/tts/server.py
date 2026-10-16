@@ -226,14 +226,16 @@ class Service:
             if session.stopped:
                 return b''
             audio = self.engine.generate(text, session.voice, session.language)
-            if not len(audio.samples) or not 16000 <= audio.sample_rate <= 48000:
-                raise ValueError('Invalid model output')
-            import numpy as np
-            pcm = (np.clip(audio.samples, -1, 1) * 32767).astype('<i2').tobytes()
-            # Headerless constant-bitrate MP3 segments can form a single stream.
-            # Duration is exactly byte length / 8000 at 64 kbit/s, including
-            # encoder padding, so cumulative sentence timing does not drift.
-            result = subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-f', 's16le', '-ar', str(audio.sample_rate), '-ac', '1', '-i', 'pipe:0', '-codec:a', 'libmp3lame', '-b:a', '64k', '-ar', '24000', '-write_xing', '0', '-id3v2_version', '0', '-f', 'mp3', 'pipe:1'], input=pcm, capture_output=True, timeout=90, check=True)
+            if hasattr(audio, 'samples'):
+                if not len(audio.samples) or not 16000 <= audio.sample_rate <= 48000:
+                    raise ValueError('Invalid model output')
+                import numpy as np
+                pcm = (np.clip(audio.samples, -1, 1) * 32767).astype('<i2').tobytes()
+                result = subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-f', 's16le', '-ar', str(audio.sample_rate), '-ac', '1', '-i', 'pipe:0', '-codec:a', 'libmp3lame', '-b:a', '64k', '-ar', '24000', '-write_xing', '0', '-id3v2_version', '0', '-f', 'mp3', 'pipe:1'], input=pcm, capture_output=True, timeout=90, check=True)
+            elif isinstance(audio, (bytes, bytearray)):
+                result = subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-i', 'pipe:0', '-codec:a', 'libmp3lame', '-b:a', '64k', '-ar', '24000', '-write_xing', '0', '-id3v2_version', '0', '-f', 'mp3', 'pipe:1'], input=audio, capture_output=True, timeout=90, check=True)
+            else:
+                raise ValueError('Invalid audio output')
             data = result.stdout
             temp = path.with_suffix('.tmp')
             temp.write_bytes(data)
@@ -328,7 +330,7 @@ class Handler(BaseHTTPRequestHandler):
         if not SERVICE:
             raise RequestError(503, '서버 음성을 준비하고 있습니다. 잠시 후 다시 시도하세요.')
         if path == '/v1/status' and self.command == 'GET':
-            return self.send_json({'available': True, 'engine': 'Korean VITS / Supertonic 3', 'voices': 11, 'languages': sorted(LANGUAGES)})
+            return self.send_json({'available': True, 'engine': 'Neural Edge-TTS (자연스러운 음성)', 'voices': 11, 'languages': sorted(LANGUAGES)})
         authorization = self.headers.get('Authorization', '')
         if path == '/v1/sessions' and self.command == 'POST':
             session = SERVICE.create(self.body(), authorization)
