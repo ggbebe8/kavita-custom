@@ -671,6 +671,10 @@
     const key=summaryKey()+':immersive';if(summaryPreferences.has(key))return summaryPreferences.get(key);
     try {return localStorage.getItem(key)!=='false';}catch{return true;}
   }
+  function chapterSummaryEnabled() {
+    const key=summaryKey()+':chapter';if(summaryPreferences.has(key))return summaryPreferences.get(key);
+    try {return localStorage.getItem(key)==='true';}catch{return false;}
+  }
   function floatingSummaryHidden() {
     return !label.classList.contains('in-native-footer')&&(!summaryEnabled()||!immersiveSummaryEnabled());
   }
@@ -686,14 +690,17 @@
         const subRow=document.createElement('div');subRow.className='ms-4 mt-2';subRow.setAttribute('data-kavita-reading-summary-suboption','');
         subRow.innerHTML='<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-reading-summary-immersive><span class="form-check-label">집중 모드에서도 보이기</span></label>';holder.append(subRow);
         const subControl=subRow.querySelector('input');subControl.addEventListener('change',()=>{const key=summaryKey()+':immersive';summaryPreferences.set(key,subControl.checked);try{localStorage.setItem(key,String(subControl.checked));}catch{}update();});
-
+        const chapterRow=document.createElement('div');chapterRow.className='ms-4 mt-2';chapterRow.setAttribute('data-kavita-reading-summary-suboption','');
+        chapterRow.innerHTML='<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-reading-summary-chapter><span class="form-check-label">현재 장 진행정보 함께 표시</span></label>';holder.append(chapterRow);
+        const chapterControl=chapterRow.querySelector('input');chapterControl.addEventListener('change',()=>{const key=summaryKey()+':chapter';summaryPreferences.set(key,chapterControl.checked);try{localStorage.setItem(key,String(chapterControl.checked));}catch{}update();});
       }
       control.closest('.controls').querySelector('small').style.color=getComputedStyle(row.querySelector('label')||row).color;
       control.checked=summaryEnabled();
       const subControl=control.closest('.controls').querySelector('[data-kavita-reading-summary-immersive]');
-      subControl.checked=immersiveSummaryEnabled();subControl.disabled=!control.checked;
-      subControl.closest('[data-kavita-reading-summary-suboption]').hidden=!control.checked;
-
+      if(subControl){subControl.checked=immersiveSummaryEnabled();subControl.disabled=!control.checked;}
+      const chapterControl=control.closest('.controls').querySelector('[data-kavita-reading-summary-chapter]');
+      if(chapterControl){chapterControl.checked=chapterSummaryEnabled();chapterControl.disabled=!control.checked;}
+      control.closest('.controls').querySelectorAll('[data-kavita-reading-summary-suboption]').forEach(el=>{el.hidden=!control.checked;});
     }
   }
   function placePageLabel(root,enabled) {
@@ -1186,7 +1193,8 @@
       const before=counts.slice(0,book.index).reduce((sum,n)=>sum+n,0),total=counts.slice(0,length).reduce((sum,n)=>sum+n,0);
       const current=before+g.current,percent=Math.min(100,Math.floor(current*100/total));
       label.dataset.pages=`${current} / ${total}`;
-      label.textContent=`${current}/${total}${summaryEnabled()?' ('+percent+'%)':''}`;
+      const suffix = summaryEnabled() ? (chapterSummaryEnabled() ? `(${percent}%,${g.current}/${g.total})` : ` (${percent}%)`) : '';
+      label.textContent=`${current}/${total}${suffix}`;
       label.title='현재 화면 설정으로 계산한 책 전체 페이지. 눌러서 원하는 페이지로 이동';
       label.setAttribute('aria-label',`${label.textContent} 페이지. 원하는 페이지로 이동`);
       label.disabled = !!pageJump;
