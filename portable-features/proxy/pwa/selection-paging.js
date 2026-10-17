@@ -3,7 +3,7 @@
 export function install() {
   if (window.__kavitaSelectionPagingInstalled) return;
   window.__kavitaSelectionPagingInstalled = true;
-  const WAIT = 800, EDGE = 24, RESET = 48;
+  const WAIT = 800, EDGE = 24, RESET = 48, HOLD = 700;
   let drag = null, pending = null, timer = 0, token = 0, frame = 0, hint = null;
   let touchUI=false, handleDrag=null, adjusting=false;
   const handles=new Map();
@@ -105,21 +105,28 @@ export function install() {
       const px=Math.max(g.left+10,Math.min(g.right-10,drag.x));
       const targetX=rect?Math.max(g.left+10,Math.min(g.right-10,rect.left)):px;
       const targetY=rect?Math.max(g.top+2,Math.min(g.bottom-2,rect.top+rect.height/2)):(request.direction>0?g.top+20:g.bottom-20);
+      const clientX=handleDrag?.lastClientX??drag.x, clientY=handleDrag?.lastClientY??drag.y;
+      const holdUntil=performance.now()+HOLD;
+      const rb={
+        content:g.content,
+        anchor:anchorNode,
+        anchorOffset:anchorOff,
+        pointNode:point.node,
+        pointOffset:point.offset,
+        targetX,
+        targetY,
+        direction:request.direction,
+        holdUntil,
+        baseClientX:clientX,
+        baseClientY:clientY,
+        lastClientX:clientX,
+        lastClientY:clientY
+      };
       if (handleDrag) {
-        const clientX=handleDrag.lastClientX??drag.x, clientY=handleDrag.lastClientY??drag.y;
-        handleDrag.dx=targetX-clientX;
-        handleDrag.dy=targetY-clientY;
+        handleDrag.rebase=rb;
         drag.x=targetX;drag.y=targetY;drag.startX=targetX;drag.startY=targetY;
       } else {
-        drag.rebase={
-          content:g.content,
-          anchor:current.anchor,
-          anchorOffset:current.anchorOffset,
-          dx:targetX-drag.x,
-          dy:targetY-drag.y,
-          lastX:drag.x,
-          lastY:drag.y
-        };
+        drag.rebase=rb;
       }
       updateHandles();
     } else {
@@ -183,16 +190,27 @@ export function install() {
     if (!drag?.rebase || adjusting) return;
     const own = drag.rebase, g = geometry(own.content);
     if (!g || !own.anchor.isConnected) { if (drag) drag.rebase = null; return; }
-    const vx = Math.max(g.left + 10, Math.min(g.right - 10, clientX + own.dx));
-    const vy = Math.max(g.top + 2, Math.min(g.bottom - 2, clientY + own.dy));
-    const p = pointAt(own.content, vx, vy);
-    if (p) {
-      adjusting = true;
-      try {
-        getSelection().setBaseAndExtent(own.anchor, own.anchorOffset, p.node, p.offset);
-      } finally {
-        adjusting = false;
+    const now = performance.now();
+    adjusting = true;
+    try {
+      if (now < own.holdUntil) {
+        own.baseClientX = clientX;
+        own.baseClientY = clientY;
+        getSelection().setBaseAndExtent(own.anchor, own.anchorOffset, own.pointNode, own.pointOffset);
+        return;
       }
+      const dir = own.direction;
+      const deltaY = clientY - own.baseClientY;
+      const deltaX = clientX - own.baseClientX;
+      const activeDeltaY = dir > 0 ? Math.max(0, deltaY - 8) : Math.min(0, deltaY + 8);
+      const vx = Math.max(g.left + 10, Math.min(g.right - 10, own.targetX + deltaX));
+      const vy = Math.max(g.top + 2, Math.min(g.bottom - 2, own.targetY + activeDeltaY));
+      const p = pointAt(own.content, vx, vy);
+      if (p) {
+        getSelection().setBaseAndExtent(own.anchor, own.anchorOffset, p.node, p.offset);
+      }
+    } finally {
+      adjusting = false;
     }
   }
   function startDragForHandle(event,rect,content) {
@@ -202,6 +220,29 @@ export function install() {
     const own=handleDrag;if(!own||event.pointerId!==own.id)return;
     own.lastClientX=event.clientX;own.lastClientY=event.clientY;
     const g=geometry(own.content);if(!g||range()?.content!==own.content||!own.fixed.isConnected)return finishHandle(event);
+
+    if (own.rebase) {
+      const rb = own.rebase;
+      const now = performance.now();
+      if (now < rb.holdUntil) {
+        rb.baseClientX = event.clientX;
+        rb.baseClientY = event.clientY;
+        getSelection().setBaseAndExtent(own.fixed, own.fixedOffset, rb.pointNode, rb.pointOffset);
+        move(rb.targetX, rb.targetY);
+        return;
+      }
+      const dir = rb.direction;
+      const deltaY = event.clientY - rb.baseClientY;
+      const deltaX = event.clientX - rb.baseClientX;
+      const activeDeltaY = dir > 0 ? Math.max(0, deltaY - 8) : Math.min(0, deltaY + 8);
+      const vx = Math.max(g.left + 10, Math.min(g.right - 10, rb.targetX + deltaX));
+      const vy = Math.max(g.top + 2, Math.min(g.bottom - 2, rb.targetY + activeDeltaY));
+      const p = pointAt(own.content, vx, vy);
+      if (p) getSelection().setBaseAndExtent(own.fixed, own.fixedOffset, p.node, p.offset);
+      move(vx, vy);
+      return;
+    }
+
     const x=Math.max(g.left+10,Math.min(g.right-10,event.clientX+own.dx));
     const y=Math.max(g.top+2,Math.min(g.bottom-2,event.clientY+own.dy));
     const p=pointAt(own.content,x,y);

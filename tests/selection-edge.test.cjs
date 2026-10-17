@@ -30,8 +30,11 @@ const {chromium}=require('playwright'),{readFileSync}=require('node:fs'),assert=
  await page.mouse.move(180,451);
  assert.equal(await page.evaluate(()=>getSelection().focusOffset),turnFocus,'slight movement at bottom does not jump to end of new page');
  await page.mouse.move(180,480,{steps:3});
+ assert.equal(await page.evaluate(()=>getSelection().focusOffset),turnFocus,'during settle hold period, movement preserves first line');
+ await page.waitForTimeout(750);
+ await page.mouse.move(180,510,{steps:3});
  const extendedFocus=await page.evaluate(()=>getSelection().focusOffset);
- assert.ok(extendedFocus>turnFocus,'moving mouse further down extends selection incrementally');
+ assert.ok(extendedFocus>turnFocus,'moving mouse further down after hold period extends selection incrementally');
  assert.ok(extendedFocus-turnFocus<300,'incremental move does not select the whole page');
  await page.waitForTimeout(1100);assert.equal(await offset(),840,'stationary edge cannot chain pages');
  await page.mouse.move(180,280,{steps:5});await page.waitForTimeout(60);await page.mouse.move(180,450,{steps:5});
@@ -42,8 +45,11 @@ const {chromium}=require('playwright'),{readFileSync}=require('node:fs'),assert=
  await page.mouse.move(180,69);
  assert.equal(await page.evaluate(()=>getSelection().focusOffset),topTurnFocus,'slight movement at top does not jump to top of previous page');
  await page.mouse.move(180,40,{steps:3});
+ assert.equal(await page.evaluate(()=>getSelection().focusOffset),topTurnFocus,'during settle hold period, movement preserves end line');
+ await page.waitForTimeout(750);
+ await page.mouse.move(180,10,{steps:3});
  const topExtendedFocus=await page.evaluate(()=>getSelection().focusOffset);
- assert.ok(topExtendedFocus<topTurnFocus,'moving mouse further up extends selection upwards');
+ assert.ok(topExtendedFocus<topTurnFocus,'moving mouse further up after hold period extends selection upwards');
  assert.ok(topTurnFocus-topExtendedFocus<300,'incremental upward move does not select the whole page');
  await reset(420);await drag(450);await page.waitForSelector('#kv-selection-edge-dwell');await page.waitForTimeout(200);await page.mouse.up();await page.waitForTimeout(850);
  assert.equal(await offset(),420,'releasing before dwell completion cancels');assert.equal(await page.locator('#kv-selection-edge-dwell').count(),0);

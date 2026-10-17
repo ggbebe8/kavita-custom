@@ -22,8 +22,12 @@ const {chromium}=require('playwright'),fs=require('node:fs'),assert=require('nod
  assert.equal(await page.evaluate(()=>getSelection().focusOffset),handleTurnFocus,'1px touchMove does not jump to end of new page');
  await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:200,y:456}]});
  await page.waitForTimeout(50);
+ assert.equal(await page.evaluate(()=>getSelection().focusOffset),handleTurnFocus,'touchmove during hold duration preserves first line');
+ await page.waitForTimeout(750);
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:200,y:500}]});
+ await page.waitForTimeout(50);
  const handleExtendedFocus=await page.evaluate(()=>getSelection().focusOffset);
- assert.ok(handleExtendedFocus>handleTurnFocus,'further touchmove extends selection incrementally');
+ assert.ok(handleExtendedFocus>handleTurnFocus,'further touchmove after hold duration extends selection incrementally');
  assert.ok(handleExtendedFocus-handleTurnFocus<300,'further touchmove does not jump to whole page');
  await page.waitForTimeout(900);assert.equal(await page.locator('.book-content').evaluate(n=>n.scrollLeft),840,'holding web handle at edge cannot chain pages');
  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await page.waitForTimeout(100);
@@ -41,8 +45,12 @@ const {chromium}=require('playwright'),fs=require('node:fs'),assert=require('nod
  assert.equal(await page.evaluate(()=>getSelection().focusOffset),startTurnFocus,'1px touchMove at top does not jump to top of previous page');
  await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:200,y:30}]});
  await page.waitForTimeout(50);
+ assert.equal(await page.evaluate(()=>getSelection().focusOffset),startTurnFocus,'touchmove during hold duration preserves end line');
+ await page.waitForTimeout(750);
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:200,y:-10}]});
+ await page.waitForTimeout(50);
  const startExtendedFocus=await page.evaluate(()=>getSelection().focusOffset);
- assert.ok(startExtendedFocus<startTurnFocus,'further upward touchmove extends selection incrementally');
+ assert.ok(startExtendedFocus<startTurnFocus,'further upward touchmove after hold duration extends selection incrementally');
  assert.ok(startTurnFocus-startExtendedFocus<300,'further upward touchmove does not select whole page');
  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await page.waitForTimeout(100);assert.equal(await page.evaluate(()=>commits.length),2);
  await page.evaluate(()=>getSelection().removeAllRanges());await page.waitForTimeout(50);assert.equal(await page.locator('.kv-selection-web-handle:visible').count(),0,'selection clear removes auxiliary handles');
