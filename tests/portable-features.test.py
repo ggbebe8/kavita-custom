@@ -31,6 +31,8 @@ with tempfile.TemporaryDirectory(prefix='kavita-portable-test-') as tmp:
     assert all('container_name' not in service for service in rendered['services'].values())
     assert (target/'proxy/swipe.js').read_bytes()==(root/'proxy/swipe.js').read_bytes()
     assert (target/'proxy/pwa/reader.js').read_bytes()==(root/'proxy/swipe.js').read_bytes()
+    assert (target/'proxy/pwa/selection-paging.js').read_bytes()==(root/'proxy/pwa/selection-paging.js').read_bytes()
+    assert '/kavita-pwa/selection-paging.js' in (target/'proxy/pwa/offline/worker.js').read_text()
     assert 'alias /usr/share/nginx/html/pwa/reader.js;' in (target/'proxy/default.conf').read_text()
     assert json.loads((target/'proxy/pwa/manifest.webmanifest').read_text())['display']=='standalone'
     assert (target/'proxy/pwa/icon-512.png').read_bytes()==(root/'proxy/pwa/icon-512.png').read_bytes()

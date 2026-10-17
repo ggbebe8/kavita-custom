@@ -31,6 +31,9 @@
   new MutationObserver(()=>{if(active&&!active.holder.isConnected)close();}).observe(document.body,{childList:true,subtree:true});
 })();
 
+// Optional module failure must leave ordinary selection and reading intact.
+void import('/kavita-pwa/selection-paging.js').then(module => module.install()).catch(() => {});
+
 // Move Kavita's annotation actions out of the way when a selection grows
 // upwards. Re-evaluate the live range, not just where the selection began.
 (() => {
@@ -146,6 +149,10 @@
       position.element[position.axis] = position.offset;
     }
   }, {capture: true, passive: true});
+  document.addEventListener('kavita-selection-page-moved', event => {
+    const content = event.detail?.content;
+    if (content?.isConnected && selectedContent() === content) {clear();remember({target:content});}
+  });
   document.addEventListener('kavita-page-navigation', clear);
   document.addEventListener('click', event => {
     if (event.target.closest?.('button,a,input,textarea,select,[contenteditable="true"]')) clear();

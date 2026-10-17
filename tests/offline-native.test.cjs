@@ -6,6 +6,7 @@ const server=http.createServer((req,res)=>{const u=new URL(req.url,'http://local
  if(u.pathname.startsWith('/api/')){apiNetwork++;res.writeHead(503);res.end();return;}
  if(u.pathname==='/kavita-offline-sw.js'){res.setHeader('Service-Worker-Allowed','/');file=path.join(root,'worker.js');}
  else if(u.pathname==='/kavita-swipe.js')file=path.resolve('proxy/swipe.js');
+ else if(['/kavita-pwa/selection-paging.js','/kavita-pwa/server-tts.js'].includes(u.pathname))file=path.resolve('proxy/pwa',path.basename(u.pathname));
  else if(u.pathname.startsWith('/kavita-pwa/offline/'))file=path.join(root,u.pathname.slice('/kavita-pwa/offline/'.length));
  else{res.writeHead(200,{'Content-Type':'text/html'});res.end('<!doctype html><html><head><script src="/kavita-pwa/offline/native-bootstrap.js"></script><script defer src="/kavita-swipe.js"></script><script type="module" src="/main-fixture.js"></script></head><body><app-root>Reader fixture</app-root></body></html>');return;}
  if(!fs.existsSync(file)){res.writeHead(404);res.end();return;}res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(file.endsWith('/worker.js')?fs.readFileSync(file,'utf8').replace(/const VERSION='[^']+';/,`const VERSION='kavita-offline-shell-test-${workerGeneration}';`):fs.readFileSync(file));
@@ -65,6 +66,7 @@ const server=http.createServer((req,res)=>{const u=new URL(req.url,'http://local
  await page.evaluate(()=>new Promise(async(resolve,reject)=>{const timeout=setTimeout(()=>reject(new Error('Worker update timeout')),15000);navigator.serviceWorker.addEventListener('controllerchange',()=>{clearTimeout(timeout);resolve();},{once:true});await(await navigator.serviceWorker.getRegistration('/')).update();}));
  await context.setOffline(true);await page.reload();await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
  await page.waitForFunction(()=>!!window.__kavitaOfflineFetch);
+ assert.equal(await page.evaluate(async()=>typeof (await import('/kavita-pwa/selection-paging.js')).install),'function','selection paging module remains available offline after worker update');
  assert.ok(await page.locator('app-root').count(),'native application survives worker cache migration');
  assert.ok(await page.evaluate(async()=>{const s=await import('/kavita-pwa/offline/store.js');return !!await s.get('books','101:1');}));
  await page.evaluate(()=>localStorage.setItem('kavita-user',JSON.stringify({id:202,username:'other',token:'other-token'})));

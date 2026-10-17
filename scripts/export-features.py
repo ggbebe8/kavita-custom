@@ -23,6 +23,7 @@ if offline.is_dir():
     server_tts = root / 'proxy/pwa/server-tts.js'
     if server_tts.is_file():
         digest.update(server_tts.read_bytes())
+    digest.update((root / 'proxy/pwa/selection-paging.js').read_bytes())
     for path in sorted(offline.glob('*')):
         if path.is_file() and path != worker:
             digest.update(path.name.encode()); digest.update(path.read_bytes())
