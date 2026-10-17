@@ -31,6 +31,65 @@
   new MutationObserver(()=>{if(active&&!active.holder.isConnected)close();}).observe(document.body,{childList:true,subtree:true});
 })();
 
+// Move Kavita's annotation actions out of the way when a selection grows
+// upwards. Re-evaluate the live range, not just where the selection began.
+(() => {
+  if (window.__kavitaSelectionToolsInstalled) return;
+  window.__kavitaSelectionToolsInstalled = true;
+  let owner = null, scheduled = false;
+  const style = document.createElement('style');
+  style.textContent = `
+    app-book-reader.kv-selection-tools-bottom app-book-line-overlay .overlay {
+      position: fixed !important;
+      top: auto !important;
+      bottom: calc(var(--kv-selection-tools-clearance, 0px) + 12px + env(safe-area-inset-bottom, 0px)) !important;
+      left: 50% !important;
+      transform: translateX(-50%) !important;
+      width: min(600px, calc(100vw - 24px)) !important;
+    }
+  `;
+  document.head.appendChild(style);
+  function clear() {
+    owner?.classList.remove('kv-selection-tools-bottom');
+    owner?.style.removeProperty('--kv-selection-tools-clearance');
+    owner = null;
+  }
+  function update() {
+    scheduled = false;
+    const selection = window.getSelection();
+    const parent = selection?.anchorNode?.nodeType === 1 ? selection.anchorNode : selection?.anchorNode?.parentElement;
+    const content = parent?.closest('app-book-reader .book-content');
+    const root = content?.closest('app-book-reader');
+    const overlay = root?.querySelector('app-book-line-overlay .overlay');
+    if (!selection || selection.isCollapsed || !selection.rangeCount || !content ||
+        !content.contains(selection.focusNode) || !overlay || overlay.querySelector('form,input,textarea') ||
+        document.querySelector('ngb-offcanvas,ngb-modal-window')) {clear();return;}
+    if (owner && owner !== root) clear();
+    const view = content.getBoundingClientRect();
+    const top = root.querySelector('.reader-header')?.getBoundingClientRect().bottom || 0;
+    const limit = top + overlay.getBoundingClientRect().height + 24;
+    const approachesTop = [...selection.getRangeAt(0).getClientRects()].some(rect =>
+      rect.width > 0 && rect.height > 0 && rect.right > Math.max(0, view.left) &&
+      rect.left < Math.min(innerWidth, view.right) && rect.bottom > Math.max(0, view.top) && rect.top < limit);
+    // Keep the new position until selection closes, so the toolbar cannot
+    // jump back under a handle as the user adjusts the range in either direction.
+    if (approachesTop || owner === root) {
+      owner = root;
+      const bar = root.querySelector('.bottom-bar')?.getBoundingClientRect();
+      const clearance = bar && bar.height > 0 ? Math.max(0, innerHeight - bar.top) : 0;
+      root.style.setProperty('--kv-selection-tools-clearance', clearance + 'px');
+      root.classList.add('kv-selection-tools-bottom');
+    }
+  }
+  function schedule() {
+    if (!scheduled) {scheduled = true;requestAnimationFrame(update);}
+  }
+  document.addEventListener('selectionchange', schedule);
+  new MutationObserver(schedule).observe(document.body, {childList: true, subtree: true});
+  window.addEventListener('resize', schedule);
+  window.addEventListener('pagehide', clear);
+})();
+
 // Native selection handles can scroll a clipped column container into the
 // neighbouring page. Preserve only its paging axis while a real text range
 // exists. Never cancel input events or change pointer-events/selection ranges.

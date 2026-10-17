@@ -30,7 +30,7 @@ const {chromium}=require('playwright'),{readFileSync}=require('node:fs'),assert=
  assert.equal(await page.locator('.reading-section').evaluate(n=>n.scrollLeft),0,'outer reader cannot drift to a neighbouring page either');
  assert.equal(await page.evaluate(()=>getSelection().toString().length),24,'the native selected range is not rewritten');
  assert.equal(await page.evaluate(()=>typeof window.__kavitaSelectionBusy),'undefined','no custom input-lock state');
- assert.equal(await page.locator('app-book-reader').evaluate(n=>n.className.includes('kv-selection')),false,'no selection pointer-blocking classes');
+ assert.equal(await page.locator('app-book-reader').evaluate(n=>n.classList.contains('kv-text-selecting') || n.classList.contains('kv-selection-adjusting')),false,'no selection pointer-blocking classes');
  assert.equal(await page.locator('.overlay').evaluate(n=>getComputedStyle(n).visibility),'visible','native annotation toolbar remains visible');
  await page.locator('#annotation').click();assert.equal(await page.evaluate(()=>annotationText.length),24,'annotation receives the current selection');
  // A toolbar action releases position retention without requiring selectionchange.
