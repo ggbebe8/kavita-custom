@@ -5,7 +5,7 @@ export function install() {
   window.__kavitaSelectionPagingInstalled = true;
   const WAIT = 800, EDGE = 24, RESET = 48;
   let drag = null, pending = null, timer = 0, token = 0, frame = 0, hint = null;
-  let touchUI=false, handleDrag=null;
+  let touchUI=false, handleDrag=null, adjusting=false;
   const handles=new Map();
   const interactive = 'button,a,input,textarea,select,[contenteditable]:not([contenteditable="false"]),app-book-line-overlay';
   const style = document.createElement('style');
@@ -97,8 +97,32 @@ export function install() {
     // its scroll event. All subsequent accidental scrolling is still blocked.
     document.dispatchEvent(new CustomEvent('kavita-selection-page-moved',{detail:{content:g.content}}));
     const point=caret(g.content,g,request.direction,drag.x);
-    if (point) current.selection.setBaseAndExtent(current.anchor,current.anchorOffset,point.node,point.offset);
-    else {
+    if (point) {
+      const anchorNode=handleDrag?handleDrag.fixed:current.anchor;
+      const anchorOff=handleDrag?handleDrag.fixedOffset:current.anchorOffset;
+      current.selection.setBaseAndExtent(anchorNode,anchorOff,point.node,point.offset);
+      const rect=endpoint(point.node,point.offset);
+      const px=Math.max(g.left+10,Math.min(g.right-10,drag.x));
+      const targetX=rect?Math.max(g.left+10,Math.min(g.right-10,rect.left)):px;
+      const targetY=rect?Math.max(g.top+2,Math.min(g.bottom-2,rect.top+rect.height/2)):(request.direction>0?g.top+20:g.bottom-20);
+      if (handleDrag) {
+        const clientX=handleDrag.lastClientX??drag.x, clientY=handleDrag.lastClientY??drag.y;
+        handleDrag.dx=targetX-clientX;
+        handleDrag.dy=targetY-clientY;
+        drag.x=targetX;drag.y=targetY;drag.startX=targetX;drag.startY=targetY;
+      } else {
+        drag.rebase={
+          content:g.content,
+          anchor:current.anchor,
+          anchorOffset:current.anchorOffset,
+          dx:targetX-drag.x,
+          dy:targetY-drag.y,
+          lastX:drag.x,
+          lastY:drag.y
+        };
+      }
+      updateHandles();
+    } else {
       g.content.scrollTo({left:g.offset,behavior:'instant'});
       document.dispatchEvent(new CustomEvent('kavita-selection-page-moved',{detail:{content:g.content}}));
     }
@@ -151,15 +175,32 @@ export function install() {
     if(!rect)return;
     handleDrag={button,id:event.pointerId,content:selected.content,fixed:start?r.endContainer:r.startContainer,
       fixedOffset:start?r.endOffset:r.startOffset,dx:rect.left-event.clientX,dy:rect.top+rect.height/2-event.clientY,
-      text:selected.selection.toString()};
+      text:selected.selection.toString(),lastClientX:event.clientX,lastClientY:event.clientY};
     startDragForHandle(event,rect,selected.content);
     button.setPointerCapture(event.pointerId);
+  }
+  function applyMouseRebase(clientX, clientY) {
+    if (!drag?.rebase || adjusting) return;
+    const own = drag.rebase, g = geometry(own.content);
+    if (!g || !own.anchor.isConnected) { if (drag) drag.rebase = null; return; }
+    const vx = Math.max(g.left + 10, Math.min(g.right - 10, clientX + own.dx));
+    const vy = Math.max(g.top + 2, Math.min(g.bottom - 2, clientY + own.dy));
+    const p = pointAt(own.content, vx, vy);
+    if (p) {
+      adjusting = true;
+      try {
+        getSelection().setBaseAndExtent(own.anchor, own.anchorOffset, p.node, p.offset);
+      } finally {
+        adjusting = false;
+      }
+    }
   }
   function startDragForHandle(event,rect,content) {
     start({target:content},Math.max(geometry(content).left+10,Math.min(geometry(content).right-10,rect.left)),rect.top+rect.height/2,event.pointerId);
   }
   function moveHandle(event) {
     const own=handleDrag;if(!own||event.pointerId!==own.id)return;
+    own.lastClientX=event.clientX;own.lastClientY=event.clientY;
     const g=geometry(own.content);if(!g||range()?.content!==own.content||!own.fixed.isConnected)return finishHandle(event);
     const x=Math.max(g.left+10,Math.min(g.right-10,event.clientX+own.dx));
     const y=Math.max(g.top+2,Math.min(g.bottom-2,event.clientY+own.dy));
@@ -202,7 +243,12 @@ export function install() {
   },{capture:true,passive:true});
   document.addEventListener('pointermove',event=>{
     if(!drag||event.pointerId!==drag.id)return;
-    if(event.pointerType==='mouse'&&!(event.buttons&1))return end();move(event.clientX,event.clientY);
+    if(event.pointerType==='mouse'&&!(event.buttons&1))return end();
+    if(drag.rebase){
+      drag.rebase.lastX=event.clientX;drag.rebase.lastY=event.clientY;
+      applyMouseRebase(event.clientX,event.clientY);
+    }
+    move(event.clientX,event.clientY);
   },{capture:true,passive:true});
   for(const type of ['pointerup','pointercancel','touchend','touchcancel'])document.addEventListener(type,end,{capture:true,passive:true});
   document.addEventListener('touchstart',event=>{
@@ -215,7 +261,12 @@ export function install() {
     if(handleDrag)return; // Captured pointermove already maps handle to text.
     const p=event.touches[0];move(p.clientX,p.clientY);
   },{capture:true,passive:true});
-  document.addEventListener('selectionchange',schedule);
+  document.addEventListener('selectionchange',()=>{
+    if(drag?.rebase&&!adjusting){
+      applyMouseRebase(drag.rebase.lastX,drag.rebase.lastY);
+    }
+    schedule();
+  });
   document.addEventListener('kavita-reading-conflict',abortInput);
   document.addEventListener('keydown',abortInput,{capture:true,passive:true});
   document.addEventListener('visibilitychange',()=>{if(document.hidden)abortInput();});
