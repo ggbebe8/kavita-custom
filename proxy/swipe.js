@@ -31,125 +31,6 @@
   new MutationObserver(()=>{if(active&&!active.holder.isConnected)close();}).observe(document.body,{childList:true,subtree:true});
 })();
 
-// Protect native text selection without cancelling its pointer/move defaults.
-// Selection handles can temporarily collapse the range and auto-scroll columns.
-(() => {
-  'use strict';
-  if(window.__kavitaSelectionGuardInstalled)return;
-  window.__kavitaSelectionGuardInstalled=true;
-  let state=null,held=false,releaseTimer=null,settleTimer=null,lastEnd=null;
-  const element=target=>target?.nodeType===3?target.parentElement:target;
-  const current=()=>{
-    const selection=window.getSelection();
-    if(!selection?.rangeCount||selection.isCollapsed||!selection.toString().trim())return null;
-    const range=selection.getRangeAt(0),start=element(range.startContainer),end=element(range.endContainer);
-    const content=start?.closest?.('.book-content'),root=content?.closest?.('app-book-reader');
-    if(!root||end?.closest?.('.book-content')!==content||!root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2'))return null;
-    return {root,content,range,signature:[range.startContainer,range.startOffset,range.endContainer,range.endOffset]};
-  };
-  const same=(a,b)=>!!a&&!!b&&a.every((value,index)=>value===b[index]);
-  function clear(){
-    clearTimeout(releaseTimer);releaseTimer=null;clearTimeout(settleTimer);
-    state?.root.classList.remove('kv-text-selecting','kv-selection-adjusting','kv-selection-menu-bottom');state=null;lastEnd=null;
-  }
-  function settle(delay=60){
-    clearTimeout(settleTimer);
-    settleTimer=setTimeout(()=>{
-      if(state){state.adjusting=false;state.root.classList.remove('kv-selection-adjusting');}
-      sync();
-    },delay);
-  }
-  function ensure(root,content){
-    if(state?.root===root&&state.content===content)return;
-    clear();
-    // The native reader scrolls .book-content and can also auto-scroll its
-    // outer reader/container when a selection handle reaches the top edge.
-    const nodes=[content,...root.querySelectorAll('.reader,.reader-container,.book-container,.reading-section')];
-    state={root,content,engaged:false,adjusting:false,until:0,start:null,locks:[...new Set(nodes)].map(node=>({node,left:node.scrollLeft,top:node.scrollTop}))};
-  }
-  function sync(){
-    if(state&&!state.root.isConnected){clear();return;}
-    const selection=current();
-    if(selection){
-      ensure(selection.root,selection.content);clearTimeout(releaseTimer);releaseTimer=null;
-      state.engaged=true;
-      state.until=Math.max(state.until,performance.now()+350);
-      state.root.classList.add('kv-text-selecting');
-      if(state.adjusting)state.root.classList.add('kv-selection-adjusting');
-      const toolbar=state.root.querySelector('app-book-line-overlay .overlay'),rect=selection.range.getBoundingClientRect();
-      const height=toolbar?.getBoundingClientRect().height||85;
-      state.root.classList.toggle('kv-selection-menu-bottom',rect.top<height+32);
-    }else if(state){
-      if(!releaseTimer){
-        state.until=performance.now()+350;
-        releaseTimer=setTimeout(()=>{releaseTimer=null;if(!current())clear();},350);
-      }
-    }
-  }
-  function begin(event){
-    const target=element(event.target);if(!target?.closest)return;
-    if(target.closest('app-book-line-overlay,button,a,input,textarea,select,[contenteditable="true"],ngb-modal-window,ngb-offcanvas'))return;
-    const selection=current(),content=target.closest('.book-content')||selection?.content,root=content?.closest?.('app-book-reader');
-    if(!root||!root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2'))return;
-    if(event.type==='pointerdown'||event.type==='touchstart')held=true;
-    if(!selection&&event.type!=='selectstart')return;
-    ensure(root,content);clearTimeout(releaseTimer);releaseTimer=null;clearTimeout(settleTimer);
-    if(selection)state.engaged=true;
-    if(!state.adjusting)state.start=selection?.signature;
-    state.adjusting=held;state.until=performance.now()+350;
-    if(state.engaged){root.classList.add('kv-text-selecting');root.classList.toggle('kv-selection-adjusting',held);}
-    settle(800); // Missing native handle end events must never hide UI forever.
-  }
-  function end(event){
-    held=false;
-    if(!state)return;
-    state.adjusting=false;state.until=performance.now()+350;settle();
-    const target=element(event.target);
-    if(target?.closest?.('app-book-line-overlay,button,input,textarea,select,ngb-modal-window,ngb-offcanvas'))return;
-    const selection=current(),now=performance.now();
-    if(!state.engaged&&!selection){clear();return;}
-    state.engaged=true;
-    // Kavita resets an unchanged selection on repeated pointerup/mouseup.
-    // Preserve it when a handle was tapped without changing the range, and
-    // let only the first end event update native annotation context otherwise.
-    const toolbar=state.root.querySelector('app-book-line-overlay .overlay');
-    if(selection&&toolbar&&(same(selection.signature,state.start)||lastEnd&&now-lastEnd.time<500&&same(selection.signature,lastEnd.signature)))event.stopImmediatePropagation();
-    if(selection)lastEnd={signature:selection.signature,time:now};
-    state.until=now+350;
-  }
-  const style=document.createElement('style');style.textContent=`
-    app-book-reader.kv-text-selecting .tap-to-paginate,
-    app-book-reader.kv-text-selecting .tap-to-paginate > div {pointer-events:none!important}
-    app-book-reader.kv-selection-adjusting .fixed-top,
-    app-book-reader.kv-selection-adjusting .fixed-top * {pointer-events:none!important}
-    app-book-reader.kv-selection-adjusting app-book-line-overlay .overlay {visibility:hidden!important;pointer-events:none!important}
-    app-book-reader.kv-selection-menu-bottom app-book-line-overlay .overlay {
-      position:fixed!important;top:auto!important;bottom:calc(48px + env(safe-area-inset-bottom,0px))!important;
-      left:8px!important;right:8px!important;width:auto!important;max-height:45vh;overflow:auto;
-    }
-  `;document.head.appendChild(style);
-  window.__kavitaSelectionBusy=root=>!!(state?.root===root&&(current()?.root===root||state.engaged&&performance.now()<state.until));
-  document.addEventListener('selectstart',begin,{capture:true,passive:true});
-  for(const type of ['pointerdown','touchstart'])document.addEventListener(type,begin,{capture:true,passive:true});
-  for(const type of ['pointermove','touchmove'])document.addEventListener(type,()=>{if(state?.adjusting){state.until=performance.now()+350;settle(800);}},{capture:true,passive:true});
-  for(const type of ['pointerup','mouseup','touchend','pointercancel','touchcancel'])document.addEventListener(type,end,{capture:true,passive:true});
-  document.addEventListener('keyup',event=>{if(event.key==='Shift'||event.shiftKey)end(event);},{capture:true,passive:true});
-  document.addEventListener('selectionchange',sync);
-  document.addEventListener('scroll',event=>{
-    if(!state||!window.__kavitaSelectionBusy(state.root))return;
-    const lock=state.locks.find(item=>item.node===event.target);
-    if(lock&&(Math.abs(lock.node.scrollLeft-lock.left)>1||Math.abs(lock.node.scrollTop-lock.top)>1))lock.node.scrollTo({left:lock.left,top:lock.top,behavior:'instant'});
-  },{capture:true,passive:true});
-  document.addEventListener('click',event=>{
-    const target=element(event.target),root=target?.closest?.('app-book-reader');
-    if(!root||!window.__kavitaSelectionBusy(root))return;
-    const arrow=target.closest('.bottom-bar button')?.querySelector('.fa-angle-left,.fa-angle-right,.fa-angle-double-left,.fa-angle-double-right');
-    if(arrow||target.closest('.book-content,.tap-to-paginate')){event.preventDefault();event.stopImmediatePropagation();}
-  },true);
-  new MutationObserver(records=>{if(state&&records.some(r=>r.type==='childList'))sync();}).observe(document.body,{childList:true,subtree:true});
-  window.addEventListener('pagehide',clear);
-})();
-
 (() => {
   'use strict';
   if (window.__kavitaSwipeInstalled) return;
@@ -193,7 +74,7 @@
   document.head.appendChild(style);
   const visible = el => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
   const selected = () => !!window.getSelection()?.toString();
-  const blocked = (root, allowLoading = false) => selected() || window.__kavitaSelectionBusy?.(root) || !root.isConnected ||
+  const blocked = (root, allowLoading = false) => selected() || !root.isConnected ||
     (!allowLoading && root.querySelector('.reading-section.is-loading')) ||
     document.activeElement?.matches('input,textarea,select,[contenteditable]:not([contenteditable="false"])') ||
     [...document.querySelectorAll(overlays)].some(visible);
@@ -216,7 +97,7 @@
   }
   async function turnPage(root, direction, source, cancelled=()=>false) {
     if (window.__kavitaBeforeNavigation && !await window.__kavitaBeforeNavigation()) return;
-    if(cancelled()||selected()||window.__kavitaSelectionBusy?.(root))return;
+    if(cancelled())return;
     turning = true;
     const restore = hiddenMenu(root);
     const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
