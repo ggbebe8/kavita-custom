@@ -195,6 +195,16 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
     app-book-reader.kv-height-tap-zones .tap-to-paginate > div {
       pointer-events: none !important;
     }
+    /* Touch paging areas: 40% prev (left), 20% menu (center), 40% next (right). */
+    app-book-reader .tap-to-paginate > .left {
+      width: 40vw !important;
+    }
+    app-book-reader .tap-to-paginate > .right {
+      width: 40vw !important;
+    }
+    app-book-reader .tap-to-paginate > .right-with-scrollbar {
+      width: calc(40vw - 1.0625rem) !important;
+    }
     /* When header menu is hidden, empty fixed-top bar must not intercept top-of-page dragging. */
     app-book-reader .fixed-top:not(:has(.reader-header)) {
       pointer-events: none !important;
@@ -334,7 +344,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
   document.addEventListener('kavita-reading-conflict',()=>{pendingTurns.length=0;gesture=null;tap=null;});
   let drainingTurns = false;
   let tap = null, settingsScheduled = false;
-  const sideTap = x => x < innerWidth * .2 || x > innerWidth * .8;
+  const sideTap = x => x < innerWidth * .4 || x > innerWidth * .6;
   function validTapClick(event, start = tap, requireOption = true) {
     return !!(start && (!requireOption || tapEnabled()) && event.isTrusted && event.detail !== 0 &&
       performance.now()-start.time <= 1200 && Math.hypot(event.clientX-start.x,event.clientY-start.y) <= 10 &&
@@ -387,7 +397,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
       if (!control) {
         const row = document.createElement('div');
         row.className = 'controls my-3';
-        row.innerHTML = '<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-height-tap-zones><span class="form-check-label">높이에 따라 페이지 넘기기</span></label><small class="d-block">좌우 각 20% 영역: 위쪽 1/3은 이전, 아래쪽 2/3은 다음 페이지. 가운데는 기존 메뉴 동작을 유지합니다. 설정은 이 브라우저에 저장됩니다.</small>';
+        row.innerHTML = '<label class="form-check"><input type="checkbox" class="form-check-input" data-kavita-height-tap-zones><span class="form-check-label">높이에 따라 페이지 넘기기</span></label><small class="d-block">좌우 각 40% 영역: 위쪽 1/3은 이전, 아래쪽 2/3은 다음 페이지. 가운데 20%는 기존 메뉴 동작을 유지합니다. 설정은 이 브라우저에 저장됩니다.</small>';
         fontRow.after(row);
         window.__kavitaSettingHelp(row,'높이에 따라 페이지 넘기기','kavita-help-height-tap');
         control = row.querySelector('input');
@@ -441,7 +451,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
     if (!validTapClick(event,start,false)) return;
     if (!tapEnabled()) {
       if (!window.matchMedia?.('(any-hover: hover) and (any-pointer: fine)')?.matches || !sideTap(event.clientX)) return;
-      const native = start.root.querySelector(event.clientX < innerWidth * .2 ? '.tap-to-paginate > .left' : '.tap-to-paginate > .right,.tap-to-paginate > .right-with-scrollbar');
+      const native = start.root.querySelector(event.clientX < innerWidth * .4 ? '.tap-to-paginate > .left' : '.tap-to-paginate > .right,.tap-to-paginate > .right-with-scrollbar');
       if (!native) return; // Native click-to-paginate is off.
       const url = location.href;
       event.preventDefault();event.stopImmediatePropagation();
@@ -450,7 +460,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
       }).catch(() => {});
       return;
     }
-    if (event.clientX >= innerWidth * .2 && event.clientX <= innerWidth * .8) {pendingTurns.length=0;return;}
+    if (event.clientX >= innerWidth * .4 && event.clientX <= innerWidth * .6) {pendingTurns.length=0;return;}
     const direction = event.clientY < innerHeight / 3 ? 'prev' : 'next';
     event.preventDefault(); event.stopImmediatePropagation();
     suppressUntil = performance.now() + 650;

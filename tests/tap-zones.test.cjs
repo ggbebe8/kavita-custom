@@ -38,8 +38,12 @@ const assert=require('node:assert/strict');
   }
   async function click(x,y){await page.waitForTimeout(700);await page.mouse.click(x,y);await page.waitForTimeout(100)}
   const moves=()=>page.evaluate(()=>moves);
-  // Off by default: original left=previous/right=next behavior.
-  await click(70,400);await click(830,100);assert.deepEqual(await moves(),['prev','next']);
+  // 40% prev (left), 20% menu (center), 40% next (right)
+  assert.equal(await page.locator('.tap-to-paginate > .left').evaluate(el=>Math.round(el.getBoundingClientRect().width)),360);
+  assert.equal(await page.locator('.tap-to-paginate > .right').evaluate(el=>Math.round(el.getBoundingClientRect().width)),360);
+  // Off by default: left=previous/right=next behavior (including extended 20%-40% and 60%-80% regions).
+  await click(70,400);await click(830,100);await click(270,400);await click(630,100);
+  assert.deepEqual(await moves(),['prev','next','prev','next']);
   await settings(true);await page.evaluate(()=>{moves=[];addMenu()});
   for(const [x,y] of [[70,100],[830,100],[70,400],[830,400]])await click(x,y);
   assert.deepEqual(await moves(),['prev','prev','next','next']);
