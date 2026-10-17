@@ -10,7 +10,7 @@ const assert=require('node:assert/strict');
    body{margin:0}.book-content{position:absolute;inset:40px 0;height:520px;touch-action:pan-y pinch-zoom}
    .tap-to-paginate>div{position:absolute;top:40px;width:20vw;height:520px;z-index:3}.left{left:0}.right{right:0}
    .reader-header{position:absolute;top:0}.bottom-bar{position:absolute;bottom:0}
-  </style><app-book-reader><div class="reading-section column-layout-1"><div class="book-container immersive"><div class="book-content"><p>Selectable text</p><a style="position:absolute;left:70px;top:100px" href="#link">Link</a></div></div></div><div class="tap-to-paginate"><div class="left"></div><div class="right"></div></div></app-book-reader>`}));
+  </style><app-book-reader><app-book-line-overlay style="display:block;height:0"></app-book-line-overlay><div class="reading-section column-layout-1"><div class="book-container immersive"><div class="book-content"><p>Selectable text</p><a style="position:absolute;left:70px;top:100px" href="#link">Link</a></div></div></div><div class="tap-to-paginate"><div class="left"></div><div class="right"></div></div></app-book-reader>`}));
   await page.addInitScript(()=>{
    window.__kavitaPageIndicatorInstalled=true;window.__kavitaFullscreenButtonInstalled=true;window.__kavitaBookmarkAffordanceInstalled=true;
    localStorage.setItem('kavita-user',JSON.stringify({username:'fixture'}));
@@ -30,7 +30,7 @@ const assert=require('node:assert/strict');
    root.querySelector('.tap-to-paginate .right').onclick=()=>moves.push('next');addMenu();
    window.addSettings=()=>{const drawer=document.createElement('app-epub-setting-drawer');drawer.innerHTML='<app-reader-settings><div class="controls"><input id="fontsize" type="range"></div></app-reader-settings>';document.body.append(drawer)};
   });
-  await page.addScriptTag({content:readFileSync('proxy/swipe.js','utf8')});
+  await page.addScriptTag({content:readFileSync(process.env.KAVITA_SWIPE_TEST_SOURCE||'proxy/swipe.js','utf8')});
   async function settings(enabled){
    await page.evaluate(()=>addSettings());const control=page.locator('[data-kavita-height-tap-zones]');await control.waitFor();
    assert.equal(await control.count(),1);await control.setChecked(enabled);
@@ -48,6 +48,11 @@ const assert=require('node:assert/strict');
   let count=(await moves()).length,menus=await page.evaluate(()=>menuChanges);
   await click(450,100);assert.equal((await moves()).length,count);assert.equal(await page.evaluate(()=>menuChanges),menus+1,'middle keeps native menu');
   await click(450,400);assert.equal((await moves()).length,count);
+  // An always-mounted empty annotation host is not an open toolbar.
+  await page.evaluate(()=>{document.querySelector('app-book-line-overlay').innerHTML='<div class="overlay" style="position:fixed;top:0;left:0;width:100px;height:40px"><button>Annotate</button></div>'});
+  count=(await moves()).length;await click(830,400);assert.equal((await moves()).length,count,'visible annotation toolbar blocks paging even with an empty selection');
+  await page.evaluate(()=>document.querySelector('app-book-line-overlay').replaceChildren());
+  await click(830,400);assert.equal((await moves()).length,count+1,'closing annotation toolbar restores paging');
   // Hidden menu uses the same native-button bridge as swipe.
   await page.evaluate(()=>removeMenu());await click(830,100);
   assert.equal((await moves()).at(-1),'prev');assert.equal(await page.locator('.reader-header').count(),0);

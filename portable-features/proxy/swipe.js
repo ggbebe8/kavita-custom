@@ -36,7 +36,9 @@
   if (window.__kavitaSwipeInstalled) return;
   window.__kavitaSwipeInstalled = true;
   const interactive = 'a,button,input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="button"]';
-  const overlays = 'ngb-modal-window,ngb-offcanvas,[role="dialog"],.modal.show,.offcanvas.show,.drawer,.drawer-backdrop,app-highlight-bar,.popover,.dropdown-menu.show';
+  // Kavita always mounts the annotation host, including when its toolbar is
+  // closed. Only its visible .overlay child should block page navigation.
+  const overlays = 'ngb-modal-window,ngb-offcanvas,[role="dialog"],.modal.show,.offcanvas.show,.drawer,.drawer-backdrop,app-highlight-bar,app-book-line-overlay .overlay,.popover,.dropdown-menu.show';
   let gesture = null, lastTurn = -Infinity, suppressUntil = 0, turning = false;
   const style = document.createElement('style');
   style.textContent = `
@@ -59,6 +61,14 @@
     app-book-reader.kv-height-tap-zones .tap-to-paginate,
     app-book-reader.kv-height-tap-zones .tap-to-paginate > div {
       pointer-events: none !important;
+    }
+    /* When header menu is hidden, empty fixed-top bar must not intercept top-of-page dragging. */
+    app-book-reader .fixed-top:not(:has(.reader-header)) {
+      pointer-events: none !important;
+    }
+    app-book-reader .fixed-top .reader-header,
+    app-book-reader .fixed-top app-book-line-overlay {
+      pointer-events: auto !important;
     }
   `;
   document.head.appendChild(style);
@@ -136,15 +146,45 @@
     if ((!next || !prev || !visible(next) || !visible(prev)) && !hiddenMenu(root) && !root.classList.contains('swipe-restoring-menu')) return;
     gesture = {root, id: t.identifier, x: t.clientX, y: t.clientY, time: performance.now()};
   }, {passive: true, capture: true});
+  let selectionScrollRoot = null, selectionOffset = 0;
+  document.addEventListener('selectstart', e => {
+    const root = e.target?.closest?.('app-book-reader');
+    if (root?.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2')) {
+      const content = root.querySelector('.book-content');
+      if (content) {
+        selectionScrollRoot = root;
+        selectionOffset = content.classList.contains('writing-style-vertical') ? content.scrollTop : content.scrollLeft;
+      }
+    }
+  }, {capture: true, passive: true});
   document.addEventListener('touchmove', e => {
     if (!gesture) return;
     if (e.touches.length !== 1 || blocked(gesture.root,true)) { gesture = null; return; }
     const t = e.touches[0];
     const dx=Math.abs(t.clientX-gesture.x),dy=Math.abs(t.clientY-gesture.y);
-    if (dy > 35 || performance.now() - gesture.time > 1200) { gesture = null;pendingTurns.length=0; return; }
-    if (dx >= 20 && dx >= dy * 2 && e.cancelable) e.preventDefault();
+    const elapsed = performance.now() - gesture.time;
+    if (dy > 35 || elapsed > 1200) { gesture = null;pendingTurns.length=0; return; }
+    if (dx >= 20 && dx >= dy * 2 && elapsed <= 350 && e.cancelable) e.preventDefault();
   }, {passive: false, capture: true});
-  document.addEventListener('selectionchange', () => { if (selected()) {gesture = null; pendingTurns.length = 0;} });
+  document.addEventListener('selectionchange', () => {
+    if (selected()) {
+      gesture = null; tap = null; pendingTurns.length = 0;
+    } else {
+      selectionScrollRoot = null;
+    }
+  });
+  document.addEventListener('scroll', e => {
+    if (selectionScrollRoot && selected() && !turning) {
+      const content = selectionScrollRoot.querySelector('.book-content');
+      if (content && e.target === content) {
+        const vertical = content.classList.contains('writing-style-vertical');
+        const current = vertical ? content.scrollTop : content.scrollLeft;
+        if (Math.abs(current - selectionOffset) > 2) {
+          content.scrollTo(vertical ? {top: selectionOffset, behavior: 'instant'} : {left: selectionOffset, behavior: 'instant'});
+        }
+      }
+    }
+  }, {capture: true, passive: true});
   document.addEventListener('touchcancel', () => { gesture = null; }, {passive: true});
   document.addEventListener('touchend', e => {
     const g = gesture; gesture = null;
@@ -173,7 +213,7 @@
   // Optional height-based paging. Keep the native middle/menu behavior and
   // route both mouse clicks and touch-generated clicks through native buttons.
   const tapPreferences = new Map();
-  const tapInteractive = interactive + ',.bookmark-overlay,app-epub-highlight,[kavita-part],[onclick]';
+  const tapInteractive = interactive + ',.bookmark-overlay,app-epub-highlight,app-book-line-overlay,[kavita-part],[onclick]';
   const pendingTurns = [];
   document.addEventListener('kavita-reading-conflict',()=>{pendingTurns.length=0;gesture=null;tap=null;});
   let drainingTurns = false;

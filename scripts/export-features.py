@@ -8,6 +8,9 @@ import shutil
 import tarfile
 
 root = Path(__file__).resolve().parents[1]
+# Serve the generated reader through the directory mount: atomic Git/editor
+# replacements of a separately bound file otherwise leave an old inode live.
+shutil.copy2(root / 'proxy/swipe.js', root / 'proxy/pwa/reader.js')
 # Any offline UI change creates a new worker script/cache version. Installed
 # PWAs then fetch the new shell rather than retaining an older module forever.
 offline = root / 'proxy/pwa/offline'
