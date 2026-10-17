@@ -250,7 +250,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
       if (blocked(root)||cancelled()) return;
       const b = buttons(root)[direction];
       if (b && !b.disabled && (restore || visible(b))) {
-        const navigation=new Event('kavita-page-navigation');navigation.kavitaTts=source==='tts';document.dispatchEvent(navigation);
+        const navigation=new Event('kavita-page-navigation');navigation.kavitaTts=source==='tts';navigation.kavitaDirection=direction;document.dispatchEvent(navigation);
         b.click();
         // Allow the native scroll/Angular loading state to settle before a
         // queued input can invoke another native page button.
@@ -263,6 +263,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
       // Loading can exceed five seconds (especially image sections). Keep
       // the temporary menu masked until loading actually finishes or exits.
       while (root.isConnected && root.querySelector('.reading-section.is-loading')) await new Promise(resolve => setTimeout(resolve, 50));
+      window.__kavitaAlignBackward?.(root);
       if (restore && root.isConnected && !root.querySelector('.reading-section.is-loading') && root.querySelector('.reader-header') && !selected() && ![...document.querySelectorAll(overlays)].some(visible)) {
         toggleMenu(root);
         await frame(); await frame();
@@ -567,6 +568,49 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
   }
   window.addEventListener('resize', cancelCalculation, {passive:true});
   let resume = null, navigationEpoch = 0;
+  let backwardIntent = 0, backwardTarget = null;
+  const nativeScrollIntoView = Element.prototype.scrollIntoView;
+  Element.prototype.scrollIntoView = function(...args) {
+    if (backwardTarget && this.closest?.('app-book-reader .book-content')) {
+      return;
+    }
+    return nativeScrollIntoView.apply(this, args);
+  };
+  function recordBackwardIntent(root) {
+    if (!root) return;
+    const g = geometry(root);
+    if (!g || g.current <= 1 || (g.vertical ? g.content.scrollTop : g.content.scrollLeft) <= 5) {
+      backwardIntent = performance.now();
+    }
+  }
+  document.addEventListener('click', event => {
+    const prevBtn = event.target.closest?.('app-book-reader .bottom-bar button');
+    if (prevBtn && prevBtn.querySelector('.fa-angle-left,.fa-angle-double-left')) {
+      recordBackwardIntent(prevBtn.closest('app-book-reader'));
+    }
+    const leftTap = event.target.closest?.('app-book-reader .tap-to-paginate > .left');
+    if (leftTap) {
+      recordBackwardIntent(leftTap.closest('app-book-reader'));
+    }
+  }, {capture: true, passive: true});
+  document.addEventListener('keydown', event => {
+    if (event.isTrusted && !event.shiftKey && ['ArrowLeft', 'PageUp'].includes(event.key)) {
+      recordBackwardIntent(document.querySelector('app-book-reader'));
+    }
+  }, {capture: true, passive: true});
+  document.addEventListener('kavita-page-navigation', event => {
+    if (event.kavitaDirection === 'prev') {
+      recordBackwardIntent(document.querySelector('app-book-reader'));
+    }
+  });
+  window.__kavitaAlignBackward = root => {
+    if (!backwardTarget || !root) return;
+    const g = geometry(root);
+    if (g) {
+      const target = (g.total - 1) * g.size;
+      g.content.scrollTo(g.vertical ? {top: target, behavior: 'instant'} : {left: target, behavior: 'instant'});
+    }
+  };
   const resumePattern = /\[boolean\('kvscreen1:([0-9a-f-]+):([0-9.]+)'\)\]$/;
   const offlineResumePattern=/\[boolean\('kvoffline1:([0-9]+)'\)\](?:\[boolean\('kvscreen1:[0-9a-f-]+:[0-9.]+'\)\])?$/;
   function layoutKey(g) {
@@ -740,7 +784,33 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
     // Notify Kavita's existing scroll/progress handler; no additional POSTs are created.
     g.content.dispatchEvent(new Event('scroll',{bubbles:true}));
   }
-  function noteNavigation() {resume=null;navigationEpoch++;}
+  function restoreBackwardScreen(root, g) {
+    if (!backwardTarget || !book || backwardTarget.id !== book.id || backwardTarget.index !== book.index) return;
+    if (performance.now() - backwardTarget.time > 10000) { backwardTarget = null; return; }
+    if (document.fonts.status !== 'loaded' || [...g.content.querySelectorAll('img')].some(img => !img.complete)) return;
+    const target = (g.total - 1) * g.size;
+    g.content.scrollTo(g.vertical ? {top: target, behavior: 'instant'} : {left: target, behavior: 'instant'});
+    if (!backwardTarget.ready) {
+      backwardTarget.ready = performance.now();
+      g.content.dispatchEvent(new Event('scroll', {bubbles: true}));
+      return;
+    }
+    if (performance.now() - backwardTarget.ready < 500) {
+      const current = g.vertical ? g.content.scrollTop : g.content.scrollLeft;
+      if (Math.abs(current - target) > 2) {
+        g.content.scrollTo(g.vertical ? {top: target, behavior: 'instant'} : {left: target, behavior: 'instant'});
+        g.content.dispatchEvent(new Event('scroll', {bubbles: true}));
+      }
+      return;
+    }
+    backwardTarget = null;
+    g.content.dispatchEvent(new Event('scroll', {bubbles: true}));
+  }
+  function noteNavigation() {
+    resume = null;
+    if (backwardTarget?.ready) backwardTarget = null;
+    navigationEpoch++;
+  }
   for(const type of ['touchstart','pointerdown','keydown'])document.addEventListener(type,event=>{if(event.isTrusted)noteNavigation();},{capture:true,passive:true});
   document.addEventListener('kavita-page-navigation',noteNavigation);
   function calculationKey(root, g) {
@@ -948,6 +1018,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
   const jumpDelay = ms => new Promise(resolve => setTimeout(resolve, ms));
   const jumpFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
   async function openTocMenu() {
+    backwardIntent = 0; backwardTarget = null;
     const root = document.querySelector('app-book-reader');
     if (!root) return;
     const openDrawer = document.querySelector('app-view-toc-drawer, .offcanvas.show app-table-of-contents');
@@ -1000,6 +1071,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
     input.dispatchEvent(new Event('input', {bubbles:true}));
   }
   async function openPageJump() {
+    backwardIntent = 0; backwardTarget = null;
     update();
     const root = document.querySelector('app-book-reader'), g = root && geometry(root);
     if (pageJump || label.disabled || !book || !g || root.querySelector('.is-loading')) return;
@@ -1122,10 +1194,18 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
       return;
     }
     if (!book || book.id !== info.id) {
+      if (book && (performance.now() - backwardIntent < 10000 || turning)) {
+        backwardTarget = {id: info.id, index: info.index, time: performance.now(), ready: null};
+      }
       book = {id:info.id, index:info.index, html:new Map(), headers:new Headers(headers)};
       cancelCalculation(); signature = ''; counts = []; generation++; failed = false;
       label.textContent='…';label.dataset.pages='…';
+    } else if (book.index !== info.index) {
+      if (info.index < book.index && (performance.now() - backwardIntent < 10000 || turning)) {
+        backwardTarget = {id: info.id, index: info.index, time: performance.now(), ready: null};
+      }
     }
+    backwardIntent = 0;
     if(book.index!==info.index && resume?.id===book.id)resume=null;
     if(book.index!==info.index || !book.renderAfter)book.renderAfter=performance.now()+120;
     book.index = info.index; book.html.set(info.index, text);
@@ -1404,6 +1484,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
     const g=geometry(root);if(!g){label.hidden=true;return;}
     if(document.fonts.status!=='loaded'||[...g.content.querySelectorAll('img')].some(img=>!img.complete))return;
     restoreScreen(root,g);
+    restoreBackwardScreen(root,g);
     label.hidden=!pageInfoEnabled()||floatingSummaryHidden();
     if(!book){label.textContent='계산 중';label.dataset.pages='계산 중';label.title='책 전체 페이지 계산 준비 중';updateSummary(g,null);return;}
     const css=getComputedStyle(g.content);
