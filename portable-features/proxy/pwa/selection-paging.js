@@ -12,8 +12,7 @@ export function install() {
   style.textContent = `
     #kv-selection-edge-dwell{position:fixed;left:50%;transform:translateX(-50%);z-index:1100;pointer-events:none;background:#222e;color:#fff;padding:5px 10px;border-radius:6px;font:12px/1.4 system-ui,sans-serif;white-space:nowrap}
     #kv-selection-edge-dwell span{display:block;height:2px;margin-top:4px;background:#fff;transform-origin:left;animation:kv-selection-edge-fill .8s linear both}
-    .kv-selection-web-handle{position:fixed;z-index:1101;box-sizing:border-box;min-width:20px;height:20px;padding:0 3px;border:1.5px solid #fff;border-radius:10px;background:#086ad8;color:#fff;box-shadow:0 1px 3px #0006;font:10px/18px system-ui,sans-serif;letter-spacing:-0.5px;text-align:center;touch-action:none;user-select:none;-webkit-user-select:none}
-    .kv-selection-web-handle[hidden]{display:none!important}
+    .kv-selection-web-handle{position:fixed;z-index:1101;box-sizing:border-box;min-width:36px;height:28px;padding:0 5px;border:2px solid #fff;border-radius:14px;background:#086ad8;color:#fff;box-shadow:0 1px 4px #0008;font:11px/24px system-ui,sans-serif;touch-action:none;user-select:none;-webkit-user-select:none}
     @keyframes kv-selection-edge-fill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
   `;
   document.head.append(style);
@@ -169,9 +168,8 @@ export function install() {
       const visible=rect&&rect.right>=g.left-1&&rect.left<=g.right+1&&rect.bottom>g.top&&rect.top<g.bottom;
       button.hidden=!visible;
       if(visible) {
-        const bw=button.offsetWidth||(kind==='start'?24:20),bh=button.offsetHeight||20;
-        button.style.left=Math.max(g.left+2,Math.min(g.right-bw-2,kind==='start'?rect.left-bw-2:rect.right+2))+'px';
-        button.style.top=Math.max(g.top+2,Math.min(g.bottom-bh-2,rect.top+(rect.height-bh)/2))+'px';
+        button.style.left=Math.max(g.left+2,Math.min(g.right-38,rect.left+(kind==='start'?-30:2)))+'px';
+        button.style.top=Math.max(g.top,Math.min(g.bottom-28,rect.top-29))+'px';
       }
     }
   }
