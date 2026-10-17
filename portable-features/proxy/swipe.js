@@ -31,6 +31,73 @@
   new MutationObserver(()=>{if(active&&!active.holder.isConnected)close();}).observe(document.body,{childList:true,subtree:true});
 })();
 
+// Native selection handles can scroll a clipped column container into the
+// neighbouring page. Preserve only its paging axis while a real text range
+// exists. Never cancel input events or change pointer-events/selection ranges.
+(() => {
+  if (window.__kavitaSelectionPagePositionInstalled) return;
+  window.__kavitaSelectionPagePositionInstalled = true;
+  let origin = null;
+  const contentAt = node => (node?.nodeType === 1 ? node : node?.parentElement)
+    ?.closest?.('app-book-reader .book-content');
+  function remember(event) {
+    const content = contentAt(event.target), root = content?.closest('app-book-reader');
+    if (!root?.querySelector('.reading-section:is(.column-layout-1,.column-layout-2)') ||
+        event.target.closest?.('a,button,input,textarea,select,[contenteditable="true"]')) return;
+    // A new handle press must retain the original page, rather than adopting
+    // a scroll offset that the browser has already changed during selection.
+    if (origin?.content === content && selectedContent() === content) return;
+    const vertical = content.classList.contains('writing-style-vertical');
+    const positions = [];
+    for (let element = content; element && element !== root; element = element.parentElement) {
+      positions.push({element, axis: vertical && element === content ? 'scrollTop' : 'scrollLeft',
+        offset: vertical && element === content ? element.scrollTop : element.scrollLeft});
+    }
+    origin = {content, root, positions, selected: selectedContent() === content};
+  }
+  function selectedContent() {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !selection.toString().trim()) return null;
+    const content = contentAt(selection.anchorNode);
+    return content && content === contentAt(selection.focusNode) ? content : null;
+  }
+  function clear() { origin = null; }
+  document.addEventListener('pointerdown', remember, {capture: true, passive: true});
+  document.addEventListener('selectstart', remember, {capture: true, passive: true});
+  document.addEventListener('selectionchange', () => {
+    if (!origin) return;
+    if (selectedContent() === origin.content) origin.selected = true;
+    // Beginning a native drag first collapses the previous range, then
+    // extends it. Do not discard its initial coordinates in between.
+    else if (origin.selected) clear();
+  }, {passive: true});
+  for (const type of ['pointerup','touchend','touchcancel']) {
+    document.addEventListener(type, () => {
+      if (origin && selectedContent() !== origin.content) clear();
+    }, {capture: true, passive: true});
+  }
+  document.addEventListener('scroll', event => {
+    if (!origin) return;
+    if (!origin.content.isConnected || !origin.root.querySelector('.reading-section:is(.column-layout-1,.column-layout-2)')) {clear();return;}
+    if (selectedContent() !== origin.content) return;
+    const position = origin.positions.find(item => item.element === event.target);
+    if (position && Math.abs(position.element[position.axis] - position.offset) > 1) {
+      // Assign only the paging axis. The native handle and toolbar keep
+      // receiving every event, including touchend outside the reader.
+      position.element[position.axis] = position.offset;
+    }
+  }, {capture: true, passive: true});
+  document.addEventListener('kavita-page-navigation', clear);
+  document.addEventListener('click', event => {
+    if (event.target.closest?.('button,a,input,textarea,select,[contenteditable="true"]')) clear();
+  }, {capture: true, passive: true});
+  document.addEventListener('keydown', event => {
+    if (!event.shiftKey && ['Escape','ArrowLeft','ArrowRight','PageUp','PageDown','Home','End'].includes(event.key)) clear();
+  }, {capture: true, passive: true});
+  window.addEventListener('resize', clear);
+  window.addEventListener('pagehide', clear);
+})();
+
 (() => {
   'use strict';
   if (window.__kavitaSwipeInstalled) return;
