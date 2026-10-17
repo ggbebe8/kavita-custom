@@ -203,6 +203,13 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
     app-book-reader .fixed-top app-book-line-overlay {
       pointer-events: auto !important;
     }
+    /* Fine pointers must reach the text underneath Kavita's transparent side
+       click areas. A stationary click is forwarded below; a drag stays native. */
+    @media (any-hover: hover) and (any-pointer: fine) {
+      app-book-reader:has(.reading-section:is(.column-layout-1,.column-layout-2)) .tap-to-paginate > div {
+        pointer-events: none !important;
+      }
+    }
   `;
   document.head.appendChild(style);
   const visible = el => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
@@ -430,7 +437,18 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
   document.addEventListener('click', event => {
     if (!event.isTrusted || event.detail === 0) return;
     const start = tap; tap = null;
-    if (!validTapClick(event,start)) return;
+    if (!validTapClick(event,start,false)) return;
+    if (!tapEnabled()) {
+      if (!window.matchMedia?.('(any-hover: hover) and (any-pointer: fine)')?.matches || !sideTap(event.clientX)) return;
+      const native = start.root.querySelector(event.clientX < innerWidth * .2 ? '.tap-to-paginate > .left' : '.tap-to-paginate > .right,.tap-to-paginate > .right-with-scrollbar');
+      if (!native) return; // Native click-to-paginate is off.
+      const url = location.href;
+      event.preventDefault();event.stopImmediatePropagation();
+      void Promise.resolve(window.__kavitaBeforeNavigation?.() ?? true).then(allowed => {
+        if (allowed && location.href === url && native.isConnected && !blocked(start.root,true)) native.click();
+      }).catch(() => {});
+      return;
+    }
     if (event.clientX >= innerWidth * .2 && event.clientX <= innerWidth * .8) {pendingTurns.length=0;return;}
     const direction = event.clientY < innerHeight / 3 ? 'prev' : 'next';
     event.preventDefault(); event.stopImmediatePropagation();

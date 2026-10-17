@@ -1,0 +1,32 @@
+const {chromium}=require('playwright'),fs=require('node:fs'),assert=require('node:assert/strict');
+(async()=>{const browser=await chromium.launch();try{
+ const page=await browser.newPage({viewport:{width:800,height:600},hasTouch:true}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.route('http://handles.test/**',route=>route.fulfill(new URL(route.request().url()).pathname==='/kavita-pwa/selection-paging.js'?{contentType:'application/javascript',body:fs.readFileSync('proxy/pwa/selection-paging.js','utf8')}:{contentType:'text/html',body:`<style>body{margin:0}.reader-container{width:400px;margin-left:20px}.reader-header{height:40px}.book-content{position:absolute;top:60px;width:400px;height:400px;column-count:1;column-gap:20px;overflow:hidden;font:20px/24px sans-serif}p{margin:0}.bottom-bar{position:fixed;bottom:0;height:40px}</style><app-book-reader><div class="reader-container"><div class="reader-header"></div><app-book-line-overlay></app-book-line-overlay><div class="reading-section column-layout-1"><div class="book-container"><div class="book-content"><p>${'Touch range adjustment continues across screen pages. '.repeat(800)}</p></div></div></div><div class="bottom-bar"></div></div></app-book-reader>`}));
+ await page.goto('http://handles.test');await page.evaluate(()=>{
+  window.__kavitaPageIndicatorInstalled=true;window.__kavitaFullscreenButtonInstalled=true;window.__kavitaBookmarkAffordanceInstalled=true;window.__kavitaBeforeNavigation=async()=>true;
+  window.commits=[];document.querySelector('.book-container').addEventListener('pointerup',()=>{const s=getSelection();if(!s.isCollapsed)commits.push({text:s.toString(),start:s.getRangeAt(0).startOffset,end:s.getRangeAt(0).endOffset});});
+  window.selectMiddle=()=>{const c=document.querySelector('.book-content');c.scrollLeft=420;const a=document.caretRangeFromPoint(140,230),b=document.caretRangeFromPoint(240,280);getSelection().setBaseAndExtent(a.startContainer,a.startOffset,b.startContainer,b.startOffset);};
+ });await page.addScriptTag({content:fs.readFileSync('proxy/swipe.js','utf8')});await page.waitForFunction(()=>window.__kavitaSelectionPagingInstalled);
+ await page.touchscreen.tap(700,550);await page.evaluate(()=>selectMiddle());
+ const handle=page.locator('[data-kv-selection-handle="end"]');await handle.waitFor({state:'visible'});
+ const cdp=await page.context().newCDPSession(page);let box=await handle.boundingBox();
+ const anchor=await page.evaluate(()=>getSelection().getRangeAt(0).startOffset),oldFocus=await page.evaluate(()=>getSelection().getRangeAt(0).endOffset);
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box.x+box.width/2,y:box.y+box.height/2}]});
+ for(let i=1;i<=8;i++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:200,y:box.y+box.height/2+(425-box.y-box.height/2)*i/8}]});
+ await page.waitForSelector('#kv-selection-edge-dwell');await page.waitForFunction(()=>document.querySelector('.book-content').scrollLeft===840);
+ assert.equal(await page.evaluate(()=>getSelection().anchorOffset),anchor,'custom handle preserves opposite range endpoint');
+ assert.ok(await page.evaluate(()=>getSelection().focusOffset)>oldFocus,'touch handle extends selection into next screen');
+ await page.waitForTimeout(900);assert.equal(await page.locator('.book-content').evaluate(n=>n.scrollLeft),840,'holding web handle at edge cannot chain pages');
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await page.waitForTimeout(100);
+ assert.equal(await page.evaluate(()=>commits.length),1,'one completed drag commits one range to native annotation logic');
+ assert.equal(await page.evaluate(()=>commits[0].text===getSelection().toString()),true,'annotation receives final extended text');
+ await page.evaluate(()=>getSelection().removeAllRanges());await page.waitForTimeout(50);await page.evaluate(()=>selectMiddle());await page.waitForTimeout(80);
+ const startHandle=page.locator('[data-kv-selection-handle="start"]');await startHandle.waitFor({state:'visible'});box=await startHandle.boundingBox();const fixed=await page.evaluate(()=>getSelection().getRangeAt(0).endOffset);
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box.x+box.width/2,y:box.y+box.height/2}]});
+ for(let i=1;i<=8;i++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:200,y:box.y+box.height/2+(50-box.y-box.height/2)*i/8}]});
+ await page.waitForFunction(()=>document.querySelector('.book-content').scrollLeft===0);
+ assert.equal(await page.evaluate(()=>getSelection().anchorOffset),fixed,'start handle preserves selection end while moving into previous screen');
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await page.waitForTimeout(100);assert.equal(await page.evaluate(()=>commits.length),2);
+ await page.evaluate(()=>getSelection().removeAllRanges());await page.waitForTimeout(50);assert.equal(await page.locator('.kv-selection-web-handle:visible').count(),0,'selection clear removes auxiliary handles');
+ assert.deepEqual(errors,[]);console.log('Real CDP touch handles passed: visible controls, captured range adjustment, 800ms paging, preserved opposite endpoint, one-shot retention, native annotation commit and cleanup. Android OS handles are not emulated.');
+ }finally{await browser.close();}})().catch(e=>{console.error(e);process.exit(1);});
