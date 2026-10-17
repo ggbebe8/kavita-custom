@@ -52,6 +52,13 @@
     clearTimeout(releaseTimer);releaseTimer=null;clearTimeout(settleTimer);
     state?.root.classList.remove('kv-text-selecting','kv-selection-adjusting','kv-selection-menu-bottom');state=null;lastEnd=null;
   }
+  function settle(delay=60){
+    clearTimeout(settleTimer);
+    settleTimer=setTimeout(()=>{
+      if(state){state.adjusting=false;state.root.classList.remove('kv-selection-adjusting');}
+      sync();
+    },delay);
+  }
   function ensure(root,content){
     if(state?.root===root&&state.content===content)return;
     clear();
@@ -72,8 +79,11 @@
       const toolbar=state.root.querySelector('app-book-line-overlay .overlay'),rect=selection.range.getBoundingClientRect();
       const height=toolbar?.getBoundingClientRect().height||85;
       state.root.classList.toggle('kv-selection-menu-bottom',rect.top<height+32);
-    }else if(state&&!state.adjusting){
-      if(!releaseTimer)releaseTimer=setTimeout(()=>{releaseTimer=null;if(!current()&&!state?.adjusting)clear();},350);
+    }else if(state){
+      if(!releaseTimer){
+        state.until=performance.now()+350;
+        releaseTimer=setTimeout(()=>{releaseTimer=null;if(!current())clear();},350);
+      }
     }
   }
   function begin(event){
@@ -83,15 +93,17 @@
     if(!root||!root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2'))return;
     if(event.type==='pointerdown'||event.type==='touchstart')held=true;
     if(!selection&&event.type!=='selectstart')return;
-    ensure(root,content);clearTimeout(releaseTimer);clearTimeout(settleTimer);
+    ensure(root,content);clearTimeout(releaseTimer);releaseTimer=null;clearTimeout(settleTimer);
     if(selection)state.engaged=true;
     if(!state.adjusting)state.start=selection?.signature;
-    state.adjusting=held;state.until=held?Infinity:performance.now()+350;
+    state.adjusting=held;state.until=performance.now()+350;
     if(state.engaged){root.classList.add('kv-text-selecting');root.classList.toggle('kv-selection-adjusting',held);}
+    settle(800); // Missing native handle end events must never hide UI forever.
   }
   function end(event){
     held=false;
     if(!state)return;
+    state.adjusting=false;state.until=performance.now()+350;settle();
     const target=element(event.target);
     if(target?.closest?.('app-book-line-overlay,button,input,textarea,select,ngb-modal-window,ngb-offcanvas'))return;
     const selection=current(),now=performance.now();
@@ -103,8 +115,7 @@
     const toolbar=state.root.querySelector('app-book-line-overlay .overlay');
     if(selection&&toolbar&&(same(selection.signature,state.start)||lastEnd&&now-lastEnd.time<500&&same(selection.signature,lastEnd.signature)))event.stopImmediatePropagation();
     if(selection)lastEnd={signature:selection.signature,time:now};
-    state.adjusting=false;state.until=now+350;
-    clearTimeout(settleTimer);settleTimer=setTimeout(()=>{state?.root.classList.remove('kv-selection-adjusting');sync();},60);
+    state.until=now+350;
   }
   const style=document.createElement('style');style.textContent=`
     app-book-reader.kv-text-selecting .tap-to-paginate,
@@ -117,9 +128,10 @@
       left:8px!important;right:8px!important;width:auto!important;max-height:45vh;overflow:auto;
     }
   `;document.head.appendChild(style);
-  window.__kavitaSelectionBusy=root=>!!(state?.root===root&&(current()?.root===root||state.engaged&&(state.adjusting||releaseTimer||performance.now()<state.until)));
+  window.__kavitaSelectionBusy=root=>!!(state?.root===root&&(current()?.root===root||state.engaged&&performance.now()<state.until));
   document.addEventListener('selectstart',begin,{capture:true,passive:true});
   for(const type of ['pointerdown','touchstart'])document.addEventListener(type,begin,{capture:true,passive:true});
+  for(const type of ['pointermove','touchmove'])document.addEventListener(type,()=>{if(state?.adjusting){state.until=performance.now()+350;settle(800);}},{capture:true,passive:true});
   for(const type of ['pointerup','mouseup','touchend','pointercancel','touchcancel'])document.addEventListener(type,end,{capture:true,passive:true});
   document.addEventListener('keyup',event=>{if(event.key==='Shift'||event.shiftKey)end(event);},{capture:true,passive:true});
   document.addEventListener('selectionchange',sync);

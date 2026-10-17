@@ -48,5 +48,12 @@ const {chromium}=require('playwright'),{readFileSync}=require('node:fs'),assert=
  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await page.waitForFunction(()=>moves===2);
  await page.mouse.move(35,12);await page.mouse.down();await page.mouse.move(300,12,{steps:10});await page.mouse.up();
  await page.waitForSelector('#annotation');assert.ok(await page.evaluate(()=>getSelection().toString().length>0),'real mouse drag creates a native text selection');assert.equal(await page.evaluate(()=>moves),2,'real text drag never turns a page');
+ await page.evaluate(()=>document.querySelector('p').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,isPrimary:true,button:0})));
+ await page.waitForTimeout(950);
+ assert.equal(await page.locator('.overlay').evaluate(n=>getComputedStyle(n).visibility),'visible','missing handle end event cannot hide annotation controls forever');
+ await page.evaluate(()=>{const p=document.querySelector('p');p.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,isPrimary:true,button:0}));getSelection().removeAllRanges();document.querySelector('app-book-line-overlay').replaceChildren();document.dispatchEvent(new Event('selectionchange'));const b=document.createElement('button');document.querySelector('.reader-header').append(b);b.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));});
+ await page.waitForTimeout(600);
+ assert.equal(await page.locator('app-book-reader').evaluate(n=>n.classList.contains('kv-selection-adjusting')||n.classList.contains('kv-text-selecting')),false,'release over a toolbar button cannot leave all reader input disabled');
+ await page.touchscreen.tap(700,400);await page.waitForFunction(()=>moves===3);
  assert.deepEqual(errors,[]);console.log('Selection drag regression passed: top toolbar placement, drag hit testing, collapsed-range scroll lock, duplicate end suppression, annotation action, and paging/swipe recovery. Native Android selection handles require manual verification.');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
