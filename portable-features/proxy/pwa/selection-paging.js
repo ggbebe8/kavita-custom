@@ -14,15 +14,56 @@ export function install() {
     #kv-selection-edge-dwell span{display:block;height:2px;margin-top:4px;background:#fff;transform-origin:left;animation:kv-selection-edge-fill .8s linear both}
     .kv-selection-web-handle{position:fixed;z-index:2147483647;box-sizing:border-box;min-width:36px;height:28px;padding:0 5px;border:2px solid #fff;border-radius:14px;background:#086ad8;color:#fff;box-shadow:0 1px 4px #0008;font:11px/24px system-ui,sans-serif;touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer}
     .kv-selection-web-handle::after{content:'';position:absolute;inset:-8px -6px}
+    ::highlight(kv-selection-drag){background-color:#086ad8;color:#fff}
     @keyframes kv-selection-edge-fill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
   `;
   document.head.append(style);
   const contentAt = node => (node?.nodeType === 1 ? node : node?.parentElement)?.closest?.('app-book-reader .book-content');
+  function activeDragRange(own) {
+    if (!own.fixed || !own.current || !own.fixed.isConnected || !own.current.isConnected) return null;
+    const r = document.createRange();
+    try {
+      const comp = own.fixed.compareDocumentPosition(own.current);
+      if (comp & Node.DOCUMENT_POSITION_PRECEDING || (own.fixed === own.current && own.fixedOffset > own.currentOffset)) {
+        r.setStart(own.current, own.currentOffset);
+        r.setEnd(own.fixed, own.fixedOffset);
+      } else {
+        r.setStart(own.fixed, own.fixedOffset);
+        r.setEnd(own.current, own.currentOffset);
+      }
+      return r;
+    } catch {
+      return null;
+    }
+  }
+  function updateDragHighlight(own) {
+    if (!window.CSS || !CSS.highlights) {
+      getSelection().setBaseAndExtent(own.fixed, own.fixedOffset, own.current, own.currentOffset);
+      return;
+    }
+    const r = activeDragRange(own);
+    if (r) CSS.highlights.set('kv-selection-drag', new Highlight(r));
+  }
   function range() {
+    if (handleDrag && handleDrag.current && handleDrag.fixed) {
+      const r = activeDragRange(handleDrag);
+      if (r) {
+        return {
+          selection: getSelection(),
+          dragRange: r,
+          content: handleDrag.content,
+          anchor: handleDrag.fixed,
+          anchorOffset: handleDrag.fixedOffset,
+          focus: handleDrag.current,
+          focusOffset: handleDrag.currentOffset,
+          toString: () => r.toString()
+        };
+      }
+    }
     const selection = getSelection(), content = contentAt(selection?.anchorNode);
     if (!selection || selection.isCollapsed || !selection.toString().trim() || !content || content !== contentAt(selection.focusNode)) return null;
-    return {selection, content, anchor: selection.anchorNode, anchorOffset: selection.anchorOffset,
-      focus: selection.focusNode, focusOffset: selection.focusOffset};
+    return {selection, dragRange: null, content, anchor: selection.anchorNode, anchorOffset: selection.anchorOffset,
+      focus: selection.focusNode, focusOffset: selection.focusOffset, toString: () => selection.toString()};
   }
   function geometry(content) {
     const root = content.closest('app-book-reader');
@@ -101,7 +142,13 @@ export function install() {
     if (point) {
       const anchorNode=handleDrag?handleDrag.fixed:current.anchor;
       const anchorOff=handleDrag?handleDrag.fixedOffset:current.anchorOffset;
-      current.selection.setBaseAndExtent(anchorNode,anchorOff,point.node,point.offset);
+      if (handleDrag) {
+        handleDrag.current = point.node;
+        handleDrag.currentOffset = point.offset;
+        updateDragHighlight(handleDrag);
+      } else {
+        current.selection.setBaseAndExtent(anchorNode,anchorOff,point.node,point.offset);
+      }
       const rect=endpoint(point.node,point.offset);
       const px=Math.max(g.left+10,Math.min(g.right-10,drag.x));
       const targetX=rect?Math.max(g.left+10,Math.min(g.right-10,rect.left)):px;
@@ -152,7 +199,8 @@ export function install() {
   function updateHandles() {
     const selected=range(),g=selected&&geometry(selected.content);
     if(!touchUI||!g) {for(const button of handles.values())button.hidden=true;return;}
-    const r=selected.selection.getRangeAt(0);
+    const r=selected.dragRange||(selected.selection.rangeCount?selected.selection.getRangeAt(0):null);
+    if(!r) {for(const button of handles.values())button.hidden=true;return;}
     for(const kind of ['start','end']) {
       const node=kind==='start'?r.startContainer:r.endContainer,offset=kind==='start'?r.startOffset:r.endOffset;
       const rect=endpoint(node,offset);
@@ -169,8 +217,9 @@ export function install() {
       const visible=rect&&rect.right>=g.left-1&&rect.left<=g.right+1&&rect.bottom>g.top&&rect.top<g.bottom;
       button.hidden=!visible;
       if(visible) {
-        button.style.left=Math.max(g.left+2,Math.min(g.right-38,rect.left+(kind==='start'?-30:2)))+'px';
-        button.style.top=Math.max(g.top,Math.min(g.bottom-28,rect.bottom+4))+'px';
+        const bw=button.offsetWidth||36,bh=button.offsetHeight||28;
+        button.style.left=Math.max(g.left+2,Math.min(g.right-bw-2,kind==='start'?rect.left-bw-4:rect.right+4))+'px';
+        button.style.top=Math.max(g.top+2,Math.min(g.bottom-bh-2,rect.top+(rect.height-bh)/2))+'px';
       }
     }
   }
@@ -179,12 +228,18 @@ export function install() {
     const selected=range(),g=selected&&geometry(selected.content);if(!g)return;
     event.preventDefault(); // Only this explicit handle owns/captures its drag.
     event.stopPropagation();
-    const r=selected.selection.getRangeAt(0),start=kind==='start';
+    const r=selected.dragRange||(selected.selection.rangeCount?selected.selection.getRangeAt(0):null),start=kind==='start';
+    if(!r)return;
     const node=start?r.startContainer:r.endContainer,offset=start?r.startOffset:r.endOffset,rect=endpoint(node,offset);
     if(!rect)return;
-    handleDrag={button,id:event.pointerId,content:selected.content,fixed:start?r.endContainer:r.startContainer,
-      fixedOffset:start?r.endOffset:r.startOffset,dx:rect.left-event.clientX,dy:rect.top+rect.height/2-event.clientY,
-      text:selected.selection.toString(),lastClientX:event.clientX,lastClientY:event.clientY};
+    const fixedNode=start?r.endContainer:r.startContainer,fixedOffset=start?r.endOffset:r.startOffset;
+    handleDrag={button,kind,id:event.pointerId,content:selected.content,fixed:fixedNode,
+      fixedOffset,current:node,currentOffset:offset,dx:rect.left-event.clientX,dy:rect.top+rect.height/2-event.clientY,
+      text:selected.toString(),lastClientX:event.clientX,lastClientY:event.clientY};
+    if(window.CSS&&CSS.highlights) {
+      updateDragHighlight(handleDrag);
+      selected.selection.removeAllRanges();
+    }
     startDragForHandle(event,rect,selected.content);
     button.setPointerCapture(event.pointerId);
   }
@@ -229,7 +284,9 @@ export function install() {
       if (now < rb.holdUntil) {
         rb.baseClientX = event.clientX;
         rb.baseClientY = event.clientY;
-        getSelection().setBaseAndExtent(own.fixed, own.fixedOffset, rb.pointNode, rb.pointOffset);
+        own.current = rb.pointNode;
+        own.currentOffset = rb.pointOffset;
+        updateDragHighlight(own);
         move(rb.targetX, rb.targetY);
         return;
       }
@@ -240,7 +297,11 @@ export function install() {
       const vx = Math.max(g.left + 10, Math.min(g.right - 10, rb.targetX + deltaX));
       const vy = Math.max(g.top + 2, Math.min(g.bottom - 2, rb.targetY + activeDeltaY));
       const p = pointAt(own.content, vx, vy);
-      if (p) getSelection().setBaseAndExtent(own.fixed, own.fixedOffset, p.node, p.offset);
+      if (p) {
+        own.current = p.node;
+        own.currentOffset = p.offset;
+        updateDragHighlight(own);
+      }
       move(vx, vy);
       return;
     }
@@ -248,15 +309,21 @@ export function install() {
     const x=Math.max(g.left+10,Math.min(g.right-10,event.clientX+own.dx));
     const y=Math.max(g.top+2,Math.min(g.bottom-2,event.clientY+own.dy));
     const p=pointAt(own.content,x,y);
-    if(p)getSelection().setBaseAndExtent(own.fixed,own.fixedOffset,p.node,p.offset);
+    if(p) {
+      own.current = p.node;
+      own.currentOffset = p.offset;
+      updateDragHighlight(own);
+    }
     move(x,y);
   }
   function finishHandle(event) {
     const own=handleDrag;if(!own||event.pointerId!==own.id)return;
     handleDrag=null;end();
     if(own.button.hasPointerCapture(own.id))own.button.releasePointerCapture(own.id);
+    if(window.CSS&&CSS.highlights)CSS.highlights.delete('kv-selection-drag');
+    getSelection().setBaseAndExtent(own.fixed,own.fixedOffset,own.current,own.currentOffset);
     const selected=range();
-    if(selected?.content===own.content&&selected.selection.toString()!==own.text) {
+    if(selected?.content===own.content&&selected.toString()!==own.text) {
       // Handle buttons live outside the book. Commit one completed range change
       // to Kavita so its annotation XPaths match the final selection as well.
       const target=selected.focus.nodeType===1?selected.focus:selected.focus.parentElement;
@@ -314,4 +381,9 @@ export function install() {
   document.addEventListener('keydown',abortInput,{capture:true,passive:true});
   document.addEventListener('visibilitychange',()=>{if(document.hidden)abortInput();});
   window.addEventListener('blur',abortInput);window.addEventListener('resize',abortInput);window.addEventListener('pagehide',abortInput);
+  window.__kavitaSelectionActiveRange = () => {
+    if (handleDrag) return activeDragRange(handleDrag);
+    const s = getSelection();
+    return s.rangeCount ? s.getRangeAt(0) : null;
+  };
 }
