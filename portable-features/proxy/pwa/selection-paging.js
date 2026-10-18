@@ -12,7 +12,8 @@ export function install() {
   style.textContent = `
     #kv-selection-edge-dwell{position:fixed;left:50%;transform:translateX(-50%);z-index:1100;pointer-events:none;background:#222e;color:#fff;padding:5px 10px;border-radius:6px;font:12px/1.4 system-ui,sans-serif;white-space:nowrap}
     #kv-selection-edge-dwell span{display:block;height:2px;margin-top:4px;background:#fff;transform-origin:left;animation:kv-selection-edge-fill .8s linear both}
-    .kv-selection-web-handle{position:fixed;z-index:1101;box-sizing:border-box;min-width:36px;height:28px;padding:0 5px;border:2px solid #fff;border-radius:14px;background:#086ad8;color:#fff;box-shadow:0 1px 4px #0008;font:11px/24px system-ui,sans-serif;touch-action:none;user-select:none;-webkit-user-select:none}
+    .kv-selection-web-handle{position:fixed;z-index:2147483647;box-sizing:border-box;min-width:36px;height:28px;padding:0 5px;border:2px solid #fff;border-radius:14px;background:#086ad8;color:#fff;box-shadow:0 1px 4px #0008;font:11px/24px system-ui,sans-serif;touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer}
+    .kv-selection-web-handle::after{content:'';position:absolute;inset:-8px -6px}
     @keyframes kv-selection-edge-fill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
   `;
   document.head.append(style);
@@ -169,7 +170,7 @@ export function install() {
       button.hidden=!visible;
       if(visible) {
         button.style.left=Math.max(g.left+2,Math.min(g.right-38,rect.left+(kind==='start'?-30:2)))+'px';
-        button.style.top=Math.max(g.top,Math.min(g.bottom-28,rect.top-29))+'px';
+        button.style.top=Math.max(g.top,Math.min(g.bottom-28,rect.bottom+4))+'px';
       }
     }
   }
@@ -177,6 +178,7 @@ export function install() {
     if(event.button!==0||!event.isPrimary)return;
     const selected=range(),g=selected&&geometry(selected.content);if(!g)return;
     event.preventDefault(); // Only this explicit handle owns/captures its drag.
+    event.stopPropagation();
     const r=selected.selection.getRangeAt(0),start=kind==='start';
     const node=start?r.startContainer:r.endContainer,offset=start?r.startOffset:r.endOffset,rect=endpoint(node,offset);
     if(!rect)return;
