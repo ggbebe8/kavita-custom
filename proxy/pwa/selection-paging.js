@@ -81,7 +81,7 @@ export function install() {
       top: Math.max(0,view.top,header?.bottom || 0), bottom: Math.min(innerHeight,view.bottom,footer?.height ? footer.top : innerHeight)};
   }
   function zone(g, inset = EDGE) {
-    if (!drag || drag.x < g.left+8 || drag.x > g.right-8 || drag.y < g.top-32 || drag.y > g.bottom+32) return 0;
+    if (!drag || drag.x < g.left-32 || drag.x > g.right+32 || drag.y < -100 || drag.y > innerHeight+60) return 0;
     if (drag.y <= g.top+inset) return -1;
     if (drag.y >= g.bottom-inset) return 1;
     return 0;
@@ -98,6 +98,16 @@ export function install() {
     if (drag.awaitExit) {if (!zone(g,RESET)) drag.awaitExit=false;cancel();return;}
     const direction=zone(g);
     if (!direction || (direction<0 ? g.offset<=1 : g.offset>=g.max-1)) {cancel();return;}
+
+    // Do NOT trigger page turn dwell if active drag hasn't reached the boundary on current page!
+    if (!drag.rebase) {
+      const activeNode = handleDrag ? handleDrag.current : selected.focus;
+      const activeOffset = handleDrag ? handleDrag.currentOffset : selected.focusOffset;
+      const activeRect = endpoint(activeNode, activeOffset);
+      if (direction < 0 && activeRect && activeRect.top > g.top + 35) { cancel(); return; }
+      if (direction > 0 && activeRect && activeRect.bottom < g.bottom - 35) { cancel(); return; }
+    }
+
     if (pending?.direction===direction && pending.content===g.content && Math.abs(pending.offset-g.offset)<2) return;
     cancel();
     pending={...g,direction,url:location.href};
@@ -188,12 +198,39 @@ export function install() {
     try {r.setStart(node,offset);r.collapse(true);const rect=[...r.getClientRects()].find(rect=>rect.height>0);return rect||null;}catch{return null;}
   }
   function pointAt(content,x,y) {
+    const g=geometry(content);if(!g)return null;
     // Hit test the book, rather than the small web handle under the finger.
     for(const button of handles.values())button.style.pointerEvents='none';
     try {
-      const p=document.caretPositionFromPoint?.(x,y),r=p?null:document.caretRangeFromPoint?.(x,y);
-      const node=p?.offsetNode||r?.startContainer,offset=p?.offset??r?.startOffset;
-      return node?.nodeType===3&&content.contains(node)?{node,offset}:null;
+      const px=Math.max(g.left+2,Math.min(g.right-2,x));
+      const py=Math.max(g.top+2,Math.min(g.bottom-2,y));
+      const isTop=y<=g.top+15,isBottom=y>=g.bottom-15;
+      const startY=isTop?g.top+10:(isBottom?g.bottom-10:py);
+
+      for(const dy of [0,8,16,24,-8,32]) {
+        const tryY=Math.max(g.top+2,Math.min(g.bottom-2,startY+dy));
+        for(const dx of [0,8,16,-8]) {
+          const tryX=Math.max(g.left+2,Math.min(g.right-2,px+dx));
+          const p=document.caretPositionFromPoint?.(tryX,tryY),r=p?null:document.caretRangeFromPoint?.(tryX,tryY);
+          const node=p?.offsetNode||r?.startContainer,offset=p?.offset??r?.startOffset;
+          if(node?.nodeType===3&&content.contains(node)) {
+            return {node,offset};
+          }
+          if(node?.nodeType===1&&content.contains(node)) {
+            const rootNode=node.childNodes[offset]||node.childNodes[offset-1]||node;
+            const walker=document.createTreeWalker(rootNode,NodeFilter.SHOW_TEXT);
+            let targetText=null,cur;
+            if (isBottom) {
+              while ((cur=walker.nextNode())) targetText=cur;
+              if (targetText) return {node:targetText,offset:targetText.length};
+            } else {
+              targetText=walker.nextNode();
+              if (targetText) return {node:targetText,offset:0};
+            }
+          }
+        }
+      }
+      return null;
     } finally {for(const button of handles.values())button.style.pointerEvents='';}
   }
   function updateHandles() {
@@ -306,15 +343,21 @@ export function install() {
       return;
     }
 
-    const x=Math.max(g.left+10,Math.min(g.right-10,event.clientX+own.dx));
-    const y=Math.max(g.top+2,Math.min(g.bottom-2,event.clientY+own.dy));
-    const p=pointAt(own.content,x,y);
-    if(p) {
+    const isTopEdge = event.clientY <= g.top + 20;
+    const isBottomEdge = event.clientY >= g.bottom - 20;
+    const probeX = (own.kind === 'start' && (event.clientX <= g.left + 30 || isTopEdge)) ? g.left + 2 :
+      (own.kind === 'end' && (event.clientX >= g.right - 30 || isBottomEdge)) ? g.right - 2 :
+      event.clientX + own.dx;
+    const probeY = isTopEdge ? g.top - 10 :
+      isBottomEdge ? g.bottom + 10 :
+      event.clientY + own.dy;
+    const p = pointAt(own.content, probeX, probeY);
+    if (p) {
       own.current = p.node;
       own.currentOffset = p.offset;
       updateDragHighlight(own);
     }
-    move(x,y);
+    move(event.clientX, event.clientY);
   }
   function finishHandle(event) {
     const own=handleDrag;if(!own||event.pointerId!==own.id)return;
@@ -326,8 +369,8 @@ export function install() {
     if(selected?.content===own.content&&selected.toString()!==own.text) {
       // Handle buttons live outside the book. Commit one completed range change
       // to Kavita so its annotation XPaths match the final selection as well.
-      const target=selected.focus.nodeType===1?selected.focus:selected.focus.parentElement;
-      target.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerType:'touch'}));
+      const target=(selected.focus.nodeType===1?selected.focus:selected.focus.parentElement)||selected.content;
+      target?.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerType:'touch'}));
     }
     schedule();
   }
@@ -357,6 +400,30 @@ export function install() {
     if(drag.rebase){
       drag.rebase.lastX=event.clientX;drag.rebase.lastY=event.clientY;
       applyMouseRebase(event.clientX,event.clientY);
+    } else if(!handleDrag && drag.content) {
+      const g=geometry(drag.content);
+      if(g) {
+        const sel=getSelection();
+        if(sel&&sel.rangeCount&&!sel.isCollapsed&&sel.anchorNode&&drag.content.contains(sel.anchorNode)) {
+          if(event.clientY<=g.top+10) {
+            const p=pointAt(drag.content,g.left+2,g.top-10);
+            if(p) {
+              const comp=sel.anchorNode.compareDocumentPosition(p.node);
+              if((comp&Node.DOCUMENT_POSITION_PRECEDING)||(sel.anchorNode===p.node&&sel.anchorOffset>=p.offset)) {
+                sel.setBaseAndExtent(sel.anchorNode,sel.anchorOffset,p.node,p.offset);
+              }
+            }
+          } else if(event.clientY>=g.bottom-10) {
+            const p=pointAt(drag.content,g.right-2,g.bottom+10);
+            if(p) {
+              const comp=sel.anchorNode.compareDocumentPosition(p.node);
+              if((comp&Node.DOCUMENT_POSITION_FOLLOWING)||(sel.anchorNode===p.node&&sel.anchorOffset<=p.offset)) {
+                sel.setBaseAndExtent(sel.anchorNode,sel.anchorOffset,p.node,p.offset);
+              }
+            }
+          }
+        }
+      }
     }
     move(event.clientX,event.clientY);
   },{capture:true,passive:true});
