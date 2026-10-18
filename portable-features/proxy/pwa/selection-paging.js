@@ -3,7 +3,7 @@
 export function install() {
   if (window.__kavitaSelectionPagingInstalled) return;
   window.__kavitaSelectionPagingInstalled = true;
-  const WAIT = 800, EDGE = 24, RESET = 48, HOLD = 700;
+  const WAIT = 800, EDGE = 24, EDGE_BOTTOM = 56, RESET = 48, RESET_BOTTOM = 76, HOLD = 700;
   let drag = null, pending = null, timer = 0, token = 0, frame = 0, hint = null;
   let touchUI=false, handleDrag=null, adjusting=false;
   const handles=new Map();
@@ -95,8 +95,10 @@ export function install() {
   }
   function zone(g, inset = EDGE) {
     if (!drag || drag.x < g.left-32 || drag.x > g.right+32 || drag.y < -100 || drag.y > innerHeight+60) return 0;
-    if (drag.y <= g.top+inset) return -1;
-    if (drag.y >= g.bottom-inset) return 1;
+    const topInset = inset;
+    const bottomInset = (inset === RESET) ? RESET_BOTTOM : (inset === EDGE ? EDGE_BOTTOM : Math.max(inset, EDGE_BOTTOM));
+    if (drag.y <= g.top+topInset) return -1;
+    if (drag.y >= g.bottom-bottomInset) return 1;
     return 0;
   }
   function cancel() {
@@ -117,11 +119,13 @@ export function install() {
 
     // Do NOT trigger page turn dwell if active drag hasn't reached the boundary on current page!
     if (!drag.rebase) {
+      if (direction < 0 && handleDrag?.kind === 'end') { cancel(); return; }
+      if (direction > 0 && handleDrag?.kind === 'start') { cancel(); return; }
       const activeNode = handleDrag ? handleDrag.current : selected.focus;
       const activeOffset = handleDrag ? handleDrag.currentOffset : selected.focusOffset;
       const activeRect = endpoint(activeNode, activeOffset);
       if (direction < 0 && activeRect && activeRect.top > g.top + 35) { cancel(); return; }
-      if (direction > 0 && activeRect && activeRect.bottom < g.bottom - 35) { cancel(); return; }
+      if (direction > 0 && activeRect && activeRect.bottom < g.bottom - 85) { cancel(); return; }
     }
 
     if (pending?.direction===direction && pending.content===g.content && Math.abs(pending.offset-g.offset)<2) return;
@@ -367,7 +371,7 @@ export function install() {
     }
 
     const isTopEdge = event.clientY <= g.top + 20;
-    const isBottomEdge = event.clientY >= g.bottom - 20;
+    const isBottomEdge = event.clientY >= g.bottom - 48;
     const probeX = (own.kind === 'start' && (event.clientX <= g.left + 30 || isTopEdge)) ? g.left + 2 :
       (own.kind === 'end' && (event.clientX >= g.right - 30 || isBottomEdge)) ? g.right - 2 :
       event.clientX + own.dx;
@@ -437,7 +441,7 @@ export function install() {
                 sel.setBaseAndExtent(sel.anchorNode,sel.anchorOffset,p.node,p.offset);
               }
             }
-          } else if(event.clientY>=g.bottom-10) {
+          } else if(event.clientY>=g.bottom-36) {
             const p=pointAt(drag.content,g.right-2,g.bottom+10);
             if(p) {
               const comp=sel.anchorNode.compareDocumentPosition(p.node);
