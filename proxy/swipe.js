@@ -59,19 +59,20 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
   }
   function update() {
     scheduled = false;
+    const activeRange = window.__kavitaSelectionActiveRange ? window.__kavitaSelectionActiveRange() : null;
     const selection = window.getSelection();
-    const parent = selection?.anchorNode?.nodeType === 1 ? selection.anchorNode : selection?.anchorNode?.parentElement;
+    const r = activeRange || (selection && !selection.isCollapsed && selection.rangeCount ? selection.getRangeAt(0) : null);
+    const parent = r?.startContainer?.nodeType === 1 ? r.startContainer : r?.startContainer?.parentElement;
     const content = parent?.closest('app-book-reader .book-content');
     const root = content?.closest('app-book-reader');
     const overlay = root?.querySelector('app-book-line-overlay .overlay');
-    if (!selection || selection.isCollapsed || !selection.rangeCount || !content ||
-        !content.contains(selection.focusNode) || !overlay || overlay.querySelector('form,input,textarea') ||
+    if (!r || !content || !content.contains(r.endContainer) || !overlay || overlay.querySelector('form,input,textarea') ||
         document.querySelector('ngb-offcanvas,ngb-modal-window')) {clear();return;}
     if (owner && owner !== root) clear();
     const view = content.getBoundingClientRect();
     const top = root.querySelector('.reader-header')?.getBoundingClientRect().bottom || 0;
     const limit = top + overlay.getBoundingClientRect().height + 24;
-    const approachesTop = [...selection.getRangeAt(0).getClientRects()].some(rect =>
+    const approachesTop = [...r.getClientRects()].some(rect =>
       rect.width > 0 && rect.height > 0 && rect.right > Math.max(0, view.left) &&
       rect.left < Math.min(innerWidth, view.right) && rect.bottom > Math.max(0, view.top) && rect.top < limit);
     // Keep the new position until selection closes, so the toolbar cannot

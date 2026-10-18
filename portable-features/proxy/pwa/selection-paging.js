@@ -16,6 +16,16 @@ export function install() {
     .kv-selection-web-handle::after{content:'';position:absolute;inset:-8px -6px}
     ::highlight(kv-selection-drag){background-color:#086ad8;color:#fff}
     @keyframes kv-selection-edge-fill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+    app-book-reader.kv-selection-active-drag .fixed-top,
+    app-book-reader.kv-selection-active-drag .fixed-top *,
+    app-book-reader.kv-selection-active-drag .reader-header,
+    app-book-reader.kv-selection-active-drag app-book-line-overlay,
+    app-book-reader.kv-selection-active-drag app-book-line-overlay * {
+      pointer-events: none !important;
+    }
+    app-book-reader.kv-selection-active-drag app-book-line-overlay .overlay {
+      visibility: hidden !important;
+    }
   `;
   document.head.append(style);
   const contentAt = node => (node?.nodeType === 1 ? node : node?.parentElement)?.closest?.('app-book-reader .book-content');
@@ -42,7 +52,10 @@ export function install() {
       return;
     }
     const r = activeDragRange(own);
-    if (r) CSS.highlights.set('kv-selection-drag', new Highlight(r));
+    if (r) {
+      CSS.highlights.set('kv-selection-drag', new Highlight(r));
+      document.dispatchEvent(new Event('selectionchange'));
+    }
   }
   function range() {
     if (handleDrag && handleDrag.current && handleDrag.fixed) {
@@ -89,7 +102,10 @@ export function install() {
   function cancel() {
     clearTimeout(timer);timer=0;pending=null;token++;hint?.remove();hint=null;
   }
-  function end() {cancel();drag=null;}
+  function end() {
+    document.querySelector('app-book-reader.kv-selection-active-drag')?.classList.remove('kv-selection-active-drag');
+    cancel();drag=null;
+  }
   function schedule() {if (!frame) frame=requestAnimationFrame(()=>{frame=0;update();});}
   function update() {
     updateHandles();
@@ -201,6 +217,9 @@ export function install() {
     const g=geometry(content);if(!g)return null;
     // Hit test the book, rather than the small web handle under the finger.
     for(const button of handles.values())button.style.pointerEvents='none';
+    const reader=content.closest('app-book-reader');
+    const wasDragging=reader?.classList.contains('kv-selection-active-drag');
+    if(!wasDragging)reader?.classList.add('kv-selection-active-drag');
     try {
       const px=Math.max(g.left+2,Math.min(g.right-2,x));
       const py=Math.max(g.top+2,Math.min(g.bottom-2,y));
@@ -231,7 +250,10 @@ export function install() {
         }
       }
       return null;
-    } finally {for(const button of handles.values())button.style.pointerEvents='';}
+    } finally {
+      for(const button of handles.values())button.style.pointerEvents='';
+      if(!wasDragging)reader?.classList.remove('kv-selection-active-drag');
+    }
   }
   function updateHandles() {
     const selected=range(),g=selected&&geometry(selected.content);
@@ -270,6 +292,7 @@ export function install() {
     const node=start?r.startContainer:r.endContainer,offset=start?r.startOffset:r.endOffset,rect=endpoint(node,offset);
     if(!rect)return;
     const fixedNode=start?r.endContainer:r.startContainer,fixedOffset=start?r.endOffset:r.startOffset;
+    selected.content.closest('app-book-reader')?.classList.add('kv-selection-active-drag');
     handleDrag={button,kind,id:event.pointerId,content:selected.content,fixed:fixedNode,
       fixedOffset,current:node,currentOffset:offset,dx:rect.left-event.clientX,dy:rect.top+rect.height/2-event.clientY,
       text:selected.toString(),lastClientX:event.clientX,lastClientY:event.clientY};
@@ -383,6 +406,7 @@ export function install() {
     const selected=range(), content=contentAt(event.target)||selected?.content, g=content&&geometry(content);
     if(!g||x<g.left||x>g.right||y<g.top-16||y>g.bottom+16)return end();
     cancel();drag={content,x,y,startX:x,startY:y,id,moved:false,awaitExit:false};
+    content.closest('app-book-reader')?.classList.add('kv-selection-active-drag');
   }
   function move(x,y) {
     if(!drag)return;
