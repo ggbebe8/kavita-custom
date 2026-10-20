@@ -21,8 +21,8 @@ services:
     environment:
       - TZ=${TZ:-Asia/Seoul}
     volumes:
-      - ${BOOKS_PATH:-/mnt/d/Kavita/books}:/books
-      - ${CONFIG_PATH:-/mnt/d/Kavita/config}:/kavita/config
+      - ${BOOKS_PATH:-~/kavita/books}:/books
+      - ${CONFIG_PATH:-~/kavita/config}:/kavita/config
     restart: unless-stopped
 
   swipe-proxy:

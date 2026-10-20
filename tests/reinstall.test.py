@@ -27,7 +27,8 @@ with tempfile.TemporaryDirectory(prefix='kavita-restore-test-') as tmp:
     with sqlite3.connect(source_config/'kavita.db') as db:
         db.execute('CREATE TABLE fixture(value TEXT)');db.execute("INSERT INTO fixture VALUES ('preserve')")
     for name in ['compose.yaml','compose.swipe.yaml']:
-        (fixture/name).write_text((root/name).read_text().replace('/mnt/d/Kavita/config',str(source_config)).replace('/mnt/d/Kavita/books',str(source_books)))
+        text = (root/name).read_text().replace('~/kavita/config',str(source_config)).replace('~/kavita/books',str(source_books)).replace('/mnt/d/Kavita/config',str(source_config)).replace('/mnt/d/Kavita/books',str(source_books))
+        (fixture/name).write_text(text)
     spec=importlib.util.spec_from_file_location('backup_fixture',root/'scripts/backup-kavita.py')
     backup=importlib.util.module_from_spec(spec);spec.loader.exec_module(backup)
     backup.__file__=str(fixture/'scripts/backup-kavita.py')

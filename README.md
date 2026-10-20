@@ -25,52 +25,108 @@ Android에서 시작한 스와이프 기능을 Windows·Linux 터치 브라우�
 
 Linux 또는 Windows WSL 환경에서 **Docker Engine, Docker Compose 플러그인, Git**을 준비합니다. 최초 설치에는 이미지 다운로드 및 Edge-TTS 모델 빌드를 위한 인터넷 연결이 필요합니다.
 
-### 방법 1. Docker Compose로 바로 설치 (추천)
+### 방법 1. 무지성 원클릭 설치 (가장 쉬운 기본 설치)
+
+환경변수 설정 없이도 기본값(사용자 홈 디렉토리의 `~/kavita`)으로 바로 구동할 수 있습니다.
 
 ```bash
 git clone https://github.com/ggbebe8/kavita-custom.git
 cd kavita-custom
 
-# 환경변수 설정 파일 생성 (필요 시 BOOKS_PATH, CONFIG_PATH, PORT 수정)
-cp .env.example .env
-
-# Kavita + 리더 프록시 + 서버 TTS 한방에 빌드 및 실행
+# 아무 설정 없이 한방에 빌드 및 실행!
 docker compose up -d --build
 ```
 
-### 방법 2. 자동 배포 스크립트 사용
+- 구동 후 웹 브라우저에서 `http://서버IP:5000` 으로 접속합니다.
+- 책 파일은 `~/kavita/books` 폴더에 넣고, Kavita 웹에서 라이브러리 추가 시 폴더 경로를 `/books` 로 지정합니다.
+- 설정 및 SQLite DB는 `~/kavita/config`에 자동 보관됩니다.
+
+### 방법 2. 저장 경로 및 포트 사용자 지정 (환경변수 설정)
+
+책 폴더 위치(`D:\...` 등)나 포트를 변경하고 싶다면 `.env` 파일을 복사하여 수정한 뒤 실행합니다.
+
+```bash
+cp .env.example .env
+nano .env   # 원하는 경로 및 포트로 수정
+docker compose up -d --build
+```
+
+#### 조정 가능한 환경변수 목록
+
+| 환경변수 | 기본값 | 설명 |
+|---|---|---|
+| `BOOKS_PATH` | `~/kavita/books` | 호스트의 책(EPUB, CBZ 등) 저장 폴더 경로 |
+| `CONFIG_PATH` | `~/kavita/config` | Kavita 설정 및 SQLite DB 데이터 저장 경로 |
+| `PORT` | `5000` | 웹 접속 포트 (`http://서버IP:5000`) |
+| `TZ` | `Asia/Seoul` | 컨테이너 시간대 (기본: 한국 표준시) |
+| `TTS_THREADS` | `2` | Edge-TTS 동시 음성 변환 스레드 수 |
+| `TTS_CACHE_MB` | `512` | 서버 TTS 음성 파일 캐시 용량 (MB) |
+
+### 방법 3. 자동 배포 스크립트 사용
 
 Python 3.12 이상이 설치되어 있다면 자동 설정 스크립트로 독립된 폴더에 구성할 수도 있습니다.
 
 ```bash
-git clone https://github.com/ggbebe8/kavita-custom.git
-cd kavita-custom
 python3 portable-features/install.py --start
 ```
 
-Kavita를 별도로 설치할 필요 없이 추가 기능과 서버 TTS까지 함께 구성합니다. 최초 이미지 빌드와 음성 모델 준비에는 수 분이 걸릴 수 있습니다.
+---
 
-| 기본값 | 위치·주소 |
-|---|---|
-| 설치 폴더 | `~/docker/kavita-custom` |
-| 웹 접속 | `http://서버주소:5000` |
-| 책 폴더 | `~/docker/kavita-custom/books` |
-| 설정·DB 폴더 | `~/docker/kavita-custom/config` |
-| 웹에서 등록할 라이브러리 경로 | `/books` |
+## 프록시(Proxy) 설정 가이드
 
-웹에서 새 계정을 만든 뒤 책 폴더에 EPUB을 넣고 라이브러리를 등록하세요. 기본 설치는 **현재 기능 구성을 재현**하며, 기존 책·계정·읽기 위치·메모 데이터는 포함하지 않습니다. 기존 설치 폴더는 덮어쓰지 않습니다.
+### 1. 내부 프록시 (`swipe-proxy` - 자동 구동)
+- **사용자가 따로 설정할 것이 없습니다.** `docker compose up` 실행 시 Nginx 기반의 `swipe-proxy`가 함께 실행됩니다.
+- 이 내부 프록시가 포트 `5000`에서 요청을 받아:
+  - Kavita 웹 리더에 **스와이프 제스처 JS (`swipe.js`) 자동 주입**
+  - `/tts/...` 요청을 **Edge-TTS 서버로 라우팅**
+  - `/kavita-pwa/...` 요청을 **오프라인 책장 및 PWA 파일로 서빙**
+- 따라서 로컬 및 사내망에서는 `http://서버IP:5000`으로 접속하기만 하면 모든 커스텀 기능이 자동으로 작동합니다.
 
-### HTTPS를 함께 구성하려면
+### 2. 외부 역방향 프록시 (HTTPS / 외부 도메인 연결 시)
+Nginx Proxy Manager(NPM), Caddy, Nginx, Cloudflare Tunnel, Synology Reverse Proxy 등을 통해 외부 도메인(`https://books.example.com`)을 연결할 때는 포트 `5000`을 바라보도록 설정합니다.
 
-위 설치 명령 **대신** 아래 명령을 사용합니다. 도메인은 본인 주소로 바꾸고 DNS와 80/443 접근을 준비하세요.
+> [!IMPORTANT]
+> **WebSocket 지원 필수**: Kavita의 실시간 읽기 진행 동기화 및 알림을 위해 프록시 설정에서 WebSocket(Upgrade 헤더)을 반드시 켜주어야 합니다.
 
-```bash
-python3 portable-features/install.py --https-domain books.example.com --start
+#### Nginx 설정 예시
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name books.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/books.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/books.example.com/privkey.pem;
+
+    client_max_body_size 0; # 대용량 책 업로드 제한 해제
+
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_http_version 1.1;
+
+        # WebSocket 및 프록시 필수 헤더
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
 ```
 
-이미 HTTPS 프록시가 있다면 기존 프록시를 사용할 수 있습니다. 외부 주소에서 PWA 설치와 오프라인 기능을 사용하려면 HTTPS가 필요하며, HTTP에서도 온라인 읽기와 TTS는 사용할 수 있습니다.
+#### Caddyfile 설정 예시
+```caddy
+books.example.com {
+    reverse_proxy 127.0.0.1:5000
+}
+```
 
-기존 폴더 지정, 포트 변경, TTS 제외 설치는 [설치 요약과 옵션](portable-features/README.md)을 참고하세요. 운영 중인 서버에 적용할 때는 포트와 데이터 경로를 확인하고, 같은 config를 두 Kavita에서 동시에 사용하지 마세요.
+#### Nginx Proxy Manager (NPM) 설정 시
+- **Forward Hostname / IP**: `127.0.0.1` (또는 호스트 IP)
+- **Forward Port**: `5000`
+- **Websockets Support**: **반드시 체크 (On)**
+- **Block Common Exploits**: 체크 (On)
+- **SSL 탭**: `Force SSL`, `HTTP/2 Support` 체크
 
 ## 설치 후 사용하기
 
