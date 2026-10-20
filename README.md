@@ -41,7 +41,22 @@ docker compose up -d --build
 - 책 파일은 `~/kavita/books` 폴더에 넣고, Kavita 웹에서 라이브러리 추가 시 폴더 경로를 `/books` 로 지정합니다.
 - 설정 및 SQLite DB는 `~/kavita/config`에 자동 보관됩니다.
 
-### 방법 2. 저장 경로 및 포트 사용자 지정 (환경변수 설정)
+### 방법 2. 외부 도메인 + 자동 HTTPS 올인원 설치 (`--profile https`)
+
+서버에 다른 웹서버나 프록시가 없는 환경에서, 도메인 연결과 Let's Encrypt SSL 자동 인증서 발급까지 한방에 구성하려면 내장 Caddy 프로필을 사용합니다:
+
+```bash
+cp .env.example .env
+nano .env   # DOMAIN=books.yourdomain.com 입력
+
+# Caddy 컨테이너를 함께 띄워 80/443 포트 자동 HTTPS 구성
+docker compose --profile https up -d --build
+```
+
+- Caddy가 자동으로 80/443 포트를 열고 SSL 인증서를 발급 및 갱신하며 내부 프록시로 연결합니다.
+- (참고: `.env`에 `COMPOSE_PROFILES=https`를 넣어두면 매번 `--profile https`를 붙이지 않아도 됩니다.)
+
+### 방법 3. 저장 경로 및 포트 사용자 지정 (환경변수 설정)
 
 책 폴더 위치(`D:\...` 등)나 포트를 변경하고 싶다면 `.env` 파일을 복사하여 수정한 뒤 실행합니다.
 
@@ -61,8 +76,10 @@ docker compose up -d --build
 | `TZ` | `Asia/Seoul` | 컨테이너 시간대 (기본: 한국 표준시) |
 | `TTS_THREADS` | `2` | Edge-TTS 동시 음성 변환 스레드 수 |
 | `TTS_CACHE_MB` | `512` | 서버 TTS 음성 파일 캐시 용량 (MB) |
+| `DOMAIN` | `localhost` | 내장 Caddy 사용 시 연결할 도메인 주소 |
+| `COMPOSE_PROFILES` | *(미설정)* | `https` 지정 시 내장 Caddy 컨테이너 자동 활성화 |
 
-### 방법 3. 자동 배포 스크립트 사용
+### 방법 4. 자동 배포 스크립트 사용
 
 Python 3.12 이상이 설치되어 있다면 자동 설정 스크립트로 독립된 폴더에 구성할 수도 있습니다.
 
@@ -83,12 +100,32 @@ python3 portable-features/install.py --start
 - 따라서 로컬 및 사내망에서는 `http://서버IP:5000`으로 접속하기만 하면 모든 커스텀 기능이 자동으로 작동합니다.
 
 ### 2. 외부 역방향 프록시 (HTTPS / 외부 도메인 연결 시)
-Nginx Proxy Manager(NPM), Caddy, Nginx, Cloudflare Tunnel, Synology Reverse Proxy 등을 통해 외부 도메인(`https://books.example.com`)을 연결할 때는 포트 `5000`을 바라보도록 설정합니다.
+
+도커 컨테이너는 서로 격리되어 있으므로, 기존 호스트에 떠 있는 외부 Caddy/NPM 설정을 도커가 자동으로 감지하거나 변경하지는 못합니다. 따라서 **현재 서버 환경에 맞게 아래 두 가지 중 하나를 선택**합니다:
+
+#### [상황 A] 이미 서버에 Caddy, NPM, Nginx 등 웹서버가 실행 중인 경우
+> **Caddy 프로필을 켜지 마시고** 기본 실행(`docker compose up -d`)을 유지하세요. 80/443 포트 충돌 없이 포트 5000번만 안전하게 구동됩니다.
+
+기존 프록시 도구에서 목적지를 `http://127.0.0.1:5000` (또는 도커 호스트 IP)으로 등록합니다:
 
 > [!IMPORTANT]
 > **WebSocket 지원 필수**: Kavita의 실시간 읽기 진행 동기화 및 알림을 위해 프록시 설정에서 WebSocket(Upgrade 헤더)을 반드시 켜주어야 합니다.
 
-#### Nginx 설정 예시
+##### Nginx Proxy Manager (NPM) 설정 시
+- **Forward Hostname / IP**: `127.0.0.1` (또는 호스트 IP)
+- **Forward Port**: `5000`
+- **Websockets Support**: **반드시 체크 (On)**
+- **Block Common Exploits**: 체크 (On)
+- **SSL 탭**: `Force SSL`, `HTTP/2 Support` 체크
+
+##### 기존 Caddy 사용 시 (Caddyfile)
+```caddy
+books.example.com {
+    reverse_proxy 127.0.0.1:5000
+}
+```
+
+##### 기존 Nginx 사용 시
 ```nginx
 server {
     listen 443 ssl http2;
@@ -114,19 +151,19 @@ server {
 }
 ```
 
-#### Caddyfile 설정 예시
-```caddy
-books.example.com {
-    reverse_proxy 127.0.0.1:5000
-}
-```
+#### [상황 B] 서버에 프록시나 웹서버가 전혀 없는 깨끗한 머신인 경우
+> 내장 Caddy 컨테이너를 함께 띄워 Let's Encrypt SSL 자동 발급 및 80/443 HTTPS를 올인원으로 처리합니다.
 
-#### Nginx Proxy Manager (NPM) 설정 시
-- **Forward Hostname / IP**: `127.0.0.1` (또는 호스트 IP)
-- **Forward Port**: `5000`
-- **Websockets Support**: **반드시 체크 (On)**
-- **Block Common Exploits**: 체크 (On)
-- **SSL 탭**: `Force SSL`, `HTTP/2 Support` 체크
+1. `.env` 파일에 도메인을 입력합니다:
+   ```env
+   COMPOSE_PROFILES=https
+   DOMAIN=books.example.com
+   ```
+2. 컨테이너를 구동합니다:
+   ```bash
+   docker compose up -d --build
+   ```
+   (Caddy 컨테이너가 새로 생성되어 80/443 포트로 인증서를 자동 발급받고 내부 `swipe-proxy`로 트래픽을 넘깁니다.)
 
 ## 설치 후 사용하기
 
