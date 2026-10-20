@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 from pathlib import Path
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -42,10 +43,11 @@ def main():
                 files[name] = hashlib.sha256(data).hexdigest()
             for name in ['compose.yaml', 'compose.swipe.yaml']:
                 content = (root / name).read_text()
-                content = content.replace(str(config), './config').replace(str(books), '__KAVITA_BOOKS_PATH__')
+                content = re.sub(r'\$\{CONFIG_PATH:-' + re.escape(str(config)) + r'\}|' + re.escape(str(config)), './config', content)
+                content = re.sub(r'\$\{BOOKS_PATH:-' + re.escape(str(books)) + r'\}|' + re.escape(str(books)), '__KAVITA_BOOKS_PATH__', content)
                 if './config:/kavita/config' not in content or '__KAVITA_BOOKS_PATH__:/books' not in content:
                     raise ValueError('Compose mounts do not match the running container')
-                if name == 'compose.yaml':
+                if 'ghcr.io/kareadita/kavita:latest' in content:
                     content = content.replace('ghcr.io/kareadita/kavita:latest', inspect['Config']['Image'])
                 add_bytes('project/' + name, content.encode())
             for folder in ['proxy', 'scripts', 'tests', 'tts']:

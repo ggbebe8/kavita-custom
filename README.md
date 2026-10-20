@@ -23,7 +23,24 @@ Android에서 시작한 스와이프 기능을 Windows·Linux 터치 브라우�
 
 ## 빠른 설치
 
-Linux 또는 Windows WSL 환경에서 **Docker Engine, Docker Compose 플러그인, Python 3.12 이상, Git**을 준비합니다. 최초 설치에는 인터넷 연결이 필요합니다.
+Linux 또는 Windows WSL 환경에서 **Docker Engine, Docker Compose 플러그인, Git**을 준비합니다. 최초 설치에는 이미지 다운로드 및 Edge-TTS 모델 빌드를 위한 인터넷 연결이 필요합니다.
+
+### 방법 1. Docker Compose로 바로 설치 (추천)
+
+```bash
+git clone https://github.com/ggbebe8/kavita-custom.git
+cd kavita-custom
+
+# 환경변수 설정 파일 생성 (필요 시 BOOKS_PATH, CONFIG_PATH, PORT 수정)
+cp .env.example .env
+
+# Kavita + 리더 프록시 + 서버 TTS 한방에 빌드 및 실행
+docker compose up -d --build
+```
+
+### 방법 2. 자동 배포 스크립트 사용
+
+Python 3.12 이상이 설치되어 있다면 자동 설정 스크립트로 독립된 폴더에 구성할 수도 있습니다.
 
 ```bash
 git clone https://github.com/ggbebe8/kavita-custom.git

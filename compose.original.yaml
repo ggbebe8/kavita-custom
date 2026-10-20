@@ -1,0 +1,12 @@
+services:
+  kavita:
+    image: ghcr.io/kareadita/kavita:latest
+    container_name: kavita
+    environment:
+      - TZ=Asia/Seoul
+    volumes:
+      - /mnt/d/Kavita/books:/books
+      - /mnt/d/Kavita/config:/kavita/config
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
