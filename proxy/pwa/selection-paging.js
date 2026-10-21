@@ -5,7 +5,8 @@ export function install() {
   window.__kavitaSelectionPagingInstalled = true;
   const WAIT = 800, EDGE = 24, EDGE_BOTTOM = 56, RESET = 48, RESET_BOTTOM = 76, HOLD = 700;
   let drag = null, pending = null, timer = 0, token = 0, frame = 0, hint = null;
-  let touchUI=false, handleDrag=null, adjusting=false;
+  const hasTouchSupport = () => (typeof navigator !== 'undefined' && (navigator.maxTouchPoints > 0 || 'ontouchstart' in window));
+  let touchUI=hasTouchSupport(), handleDrag=null, adjusting=false;
   const handles=new Map();
   const interactive = 'button,a,input,textarea,select,[contenteditable]:not([contenteditable="false"]),app-book-line-overlay';
   const style = document.createElement('style');
@@ -78,11 +79,13 @@ export function install() {
     return {selection, dragRange: null, content, anchor: selection.anchorNode, anchorOffset: selection.anchorOffset,
       focus: selection.focusNode, focusOffset: selection.focusOffset, toString: () => selection.toString()};
   }
+  const overlayVisible = el => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+  const hasOverlay = () => [...document.querySelectorAll('ngb-modal-window,ngb-offcanvas,dialog[open],[role="dialog"]:not(dialog:not([open])),app-book-line-overlay form')].some(overlayVisible);
   function geometry(content) {
     const root = content.closest('app-book-reader');
     if (!root?.isConnected || !root.querySelector('.reading-section:is(.column-layout-1,.column-layout-2)') ||
         root.querySelector('.is-loading') || content.classList.contains('writing-style-vertical') ||
-        getComputedStyle(content).direction === 'rtl' || document.querySelector('ngb-modal-window,ngb-offcanvas,[role="dialog"],app-book-line-overlay form')) return null;
+        getComputedStyle(content).direction === 'rtl' || hasOverlay()) return null;
     const css = getComputedStyle(content), reader = root.querySelector('.reader-container');
     // Same screen step used by Kavita's horizontal column reader and TTS.
     const size = (reader?.offsetWidth || content.clientWidth) - 2 * (parseFloat(css.marginLeft) || 0) + 20;
@@ -261,7 +264,7 @@ export function install() {
   }
   function updateHandles() {
     const selected=range(),g=selected&&geometry(selected.content);
-    if(!touchUI||!g) {for(const button of handles.values())button.hidden=true;return;}
+    if(!g) {for(const button of handles.values())button.hidden=true;return;}
     const r=selected.dragRange||(selected.selection.rangeCount?selected.selection.getRangeAt(0):null);
     if(!r) {for(const button of handles.values())button.hidden=true;return;}
     for(const kind of ['start','end']) {
@@ -419,7 +422,11 @@ export function install() {
     schedule();
   }
   document.addEventListener('pointerdown',event=>{
-    if(!event.target.closest?.('[data-kv-selection-handle]')) {if(handleDrag)abortInput();touchUI=event.pointerType==='touch';schedule();}
+    if(!event.target.closest?.('[data-kv-selection-handle]')) {
+      if(handleDrag)abortInput();
+      if(event.pointerType==='touch'||event.pointerType==='pen'||hasTouchSupport())touchUI=true;
+      schedule();
+    }
     if(!event.isPrimary||event.button!==0)return end();start(event,event.clientX,event.clientY,event.pointerId);
   },{capture:true,passive:true});
   document.addEventListener('pointermove',event=>{
