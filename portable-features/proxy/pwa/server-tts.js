@@ -30,9 +30,13 @@ function mappedText(content){
   }
   return {text,points};
 }
-export function create({root,announce,startText,stopBrowser}){
+export function create({root,announce,startText,stopBrowser,onState}){
   const events=new AbortController();
   let current=null,starting=false,epoch=0,polling=false,following=false,expected=null,timer=null,lastChunk=null,lastBucket=-1,mapCache=null;
+  function notifyState(state){
+    try{onState?.(state);}catch{}
+    try{document.dispatchEvent(new CustomEvent('kavita-tts-state',{detail:{state,engine:'server'}}));}catch{}
+  }
   const audio=document.createElement('audio');audio.preload='auto';audio.setAttribute('playsinline','');audio.dataset.kavitaServerTts='';document.body.append(audio);
   const style=document.createElement('style');style.textContent='::highlight(kavita-server-tts-current){background:#ffe066;color:#111}';document.head.append(style);
   function clear(){window.CSS?.highlights?.delete(HIGHLIGHT);document.getElementById('kavita-server-tts-highlight')?.remove();}
@@ -42,6 +46,7 @@ export function create({root,announce,startText,stopBrowser}){
     epoch++;const owner=current;current=null;starting=false;clearTimeout(timer);audio.pause();audio.removeAttribute('src');audio.load();clear();lastChunk=null;mapCache=null;expected=null;mediaState();
     if(owner)void request('/sessions/'+owner.id,{method:'DELETE',keepalive:true}).catch(()=>{});
     announce(message);document.querySelectorAll('[data-kavita-tts]').forEach(n=>n.setAttribute('aria-label','본문 읽어주기'));
+    notifyState('stopped');
   }
   async function wait(check,id,timeout=20000){const until=performance.now()+timeout;while(!check()){if(id!==epoch||!root.isConnected||performance.now()>until)throw new Error('듣는 위치로 화면을 이동하지 못했습니다.');await delay(50);}}
   function menu(){const content=root.querySelector('.book-content');for(const type of ['mousedown','click'])content?.dispatchEvent(new MouseEvent(type,{bubbles:true,clientX:0,clientY:0}));}
@@ -110,6 +115,7 @@ export function create({root,announce,startText,stopBrowser}){
     if(!info||!root.querySelector('.book-content')||root.querySelector('.is-loading')){announce('본문을 불러온 후 다시 재생하세요.');return;}
     if(new URLSearchParams(location.search).get('kv-offline')==='1'){announce('오프라인 저장본에서는 브라우저 음성을 선택하세요. 서버 읽기는 온라인 리더에서 사용합니다.');return;}
     starting=true;
+    notifyState('starting');
     announce('서버 음성을 준비하는 중');
     try{
       const anchor=startText().replace(/\s+/g,' ').trim().slice(0,160);if(!anchor)throw new Error('읽을 수 있는 본문 텍스트가 없습니다.');
@@ -118,13 +124,14 @@ export function create({root,announce,startText,stopBrowser}){
       current={...result,chunks:[]};starting=false;audio.src=result.audio;audio.playbackRate=rate;
       if(navigator.mediaSession){navigator.mediaSession.metadata=new MediaMetadata({title:result.title,artist:'Kavita · 서버 읽기'});}
       void poll();await audio.play();if(id!==epoch)return;
+      notifyState('playing');
       announce('서버 음성 재생 중 · 화면을 꺼도 이어 읽습니다.');document.querySelectorAll('[data-kavita-tts]').forEach(n=>n.setAttribute('aria-label','본문 읽어주기 · 재생 중'));
     }catch(error){if(id===epoch)stop(error.name==='NotAllowedError'?'재생 버튼을 다시 눌러주세요.':error.message);}
   }
-  function pause(){if(starting){stop('재생 준비를 취소했습니다.');return;}audio.pause();void pulse();mediaState();}
-  async function resume(){if(starting){announce('서버 음성을 준비하는 중');return;}try{await audio.play();void pulse();mediaState();announce('서버 음성 재생 중');}catch(error){announce('재생을 다시 눌러주세요.');}}
+  function pause(){if(starting){stop('재생 준비를 취소했습니다.');return;}audio.pause();void pulse();mediaState();notifyState('paused');}
+  async function resume(){if(starting){announce('서버 음성을 준비하는 중');return;}try{await audio.play();void pulse();mediaState();notifyState('playing');announce('서버 음성 재생 중');}catch(error){announce('재생을 다시 눌러주세요.');}}
   function seek(delta){if(!current)return;const target=Math.max(0,audio.currentTime+delta);for(let i=0;i<audio.buffered.length;i++)if(target>=audio.buffered.start(i)&&target<=audio.buffered.end(i)){audio.currentTime=target;lastChunk=null;void follow();void pulse();return;}announce('아직 준비되지 않은 구간입니다.');}
-  for(const [event,handler] of Object.entries({play:()=>{mediaState();void pulse();},pause:()=>{mediaState();if(current){void pulse();announce('일시정지 중');}},timeupdate:()=>{void follow();},ended:()=>stop(current?.error||'책의 읽기가 끝났습니다.'),error:()=>{if(current)stop('오디오 연결이 끊겼습니다. 현재 화면에서 다시 재생하세요.');}}))audio.addEventListener(event,handler);
+  for(const [event,handler] of Object.entries({play:()=>{mediaState();void pulse();notifyState('playing');},pause:()=>{mediaState();if(current){void pulse();announce('일시정지 중');}notifyState('paused');},timeupdate:()=>{void follow();},ended:()=>stop(current?.error||'책의 읽기가 끝났습니다.'),error:()=>{if(current)stop('오디오 연결이 끊겼습니다. 현재 화면에서 다시 재생하세요.');}}))audio.addEventListener(event,handler);
   if(navigator.mediaSession)for(const [action,handler] of Object.entries({play:resume,pause,stop:()=>stop(),seekbackward:()=>seek(-15),seekforward:()=>seek(15)})){try{navigator.mediaSession.setActionHandler(action,handler);}catch{}}
   document.addEventListener('visibilitychange',()=>{clearTimeout(timer);if(!document.hidden&&current){lastChunk=null;void pulse();void poll();}},{signal:events.signal});
   document.addEventListener('kavita-page-navigation',event=>{if(current&&!event.kavitaTts)stop('페이지를 이동하여 읽기를 정지했습니다.');},{signal:events.signal});
@@ -132,5 +139,5 @@ export function create({root,announce,startText,stopBrowser}){
   document.addEventListener('scroll',event=>{if(!current||following||event.target!==root.querySelector('.book-content'))return;if(expected?.content===event.target&&Math.abs(event.target.scrollLeft-expected.left)<2&&Math.abs(event.target.scrollTop-expected.top)<2)return;stop('페이지를 이동하여 읽기를 정지했습니다.');},{capture:true,signal:events.signal});
   const observer=new MutationObserver(()=>{if(!root.isConnected){stop();events.abort();observer.disconnect();audio.remove();style.remove();}});observer.observe(document.body,{childList:true,subtree:true});
   window.addEventListener('pagehide',()=>{if(current)stop();},{signal:events.signal});
-  return {start,pause,resume,stop,get active(){return !!current||starting;},get paused(){return audio.paused;},setRate(rate){audio.playbackRate=rate;void pulse();},audio};
+  return {start,pause,resume,stop,get active(){return !!current||starting;},get starting(){return starting;},get paused(){return !starting&&audio.paused;},setRate(rate){audio.playbackRate=rate;void pulse();},audio};
 }

@@ -15,7 +15,7 @@ const {chromium}=require('playwright');const {readFileSync}=require('node:fs');c
  await page.getByRole('button',{name:'일시정지',exact:true}).click();assert.equal(await page.evaluate(()=>speechSynthesis.paused),true);
  await page.getByRole('button',{name:'재생',exact:true}).click();assert.equal(await page.evaluate(()=>speechSynthesis.paused),false);
  await page.evaluate(()=>lastUtterance.onend());await page.waitForFunction(()=>ttsCalls.filter(c=>typeof c==='object').length===2);
- await page.getByRole('button',{name:'닫기',exact:true}).click();assert.equal(await page.locator('dialog[open]').count(),0,'panel closes without stopping audio');
+ assert.equal(await page.locator('dialog[open]').count(),0,'panel closes automatically on play without stopping audio');
  await page.evaluate(()=>document.dispatchEvent(new Event('kavita-page-navigation')));assert.equal(await page.evaluate(()=>ttsCalls.at(-1)),'cancel');
  await page.locator('[data-kavita-tts]').click();assert.equal(await page.getByRole('slider').inputValue(),'1.4');await page.getByRole('button',{name:'재생',exact:true}).click();
  await page.evaluate(()=>{window.oldUtterance=lastUtterance;document.querySelector('app-book-reader').remove();});await page.waitForTimeout(100);const count=await page.evaluate(()=>ttsCalls.length);await page.evaluate(()=>oldUtterance.onend());assert.equal(await page.evaluate(()=>ttsCalls.length),count,'stale callbacks cannot restart after reader exit');
@@ -27,7 +27,7 @@ const {chromium}=require('playwright');const {readFileSync}=require('node:fs');c
   content.style.cssText='width:400px;height:80px;max-height:80px;column-count:1;column-gap:20px;font:16px/20px sans-serif;overflow:hidden';
   content.innerHTML='<p>'+('자동 페이지와 하이라이트 테스트 문장입니다. '.repeat(300))+'</p>';
  });
- await page.locator('[data-kavita-tts]').click();await page.getByRole('button',{name:'재생',exact:true}).click();await page.getByRole('button',{name:'닫기',exact:true}).click();
+ await page.locator('[data-kavita-tts]').click();await page.getByRole('button',{name:'재생',exact:true}).click();await page.waitForFunction(()=>!document.getElementById('kavita-tts-panel')?.open);
  await page.waitForFunction(()=>!!CSS.highlights.get('kavita-tts-current'));
  const pausesBefore=await page.evaluate(()=>ttsCalls.filter(c=>c==='pause').length);
  for(let i=0;i<15&&(await page.evaluate(()=>document.querySelector('.book-content').scrollLeft))===0;i++){
@@ -50,7 +50,7 @@ const {chromium}=require('playwright');const {readFileSync}=require('node:fs');c
   content.style.cssText='width:45px;height:24px;max-height:24px;column-count:1;column-gap:20px;font:20px/24px sans-serif;word-break:break-all;overflow:hidden';
   content.textContent='안녕하세요.';
  });
- await page.locator('[data-kavita-tts]').click();await page.getByRole('button',{name:'재생',exact:true}).click();await page.getByRole('button',{name:'닫기',exact:true}).click();
+ await page.locator('[data-kavita-tts]').click();await page.getByRole('button',{name:'재생',exact:true}).click();await page.waitForFunction(()=>!document.getElementById('kavita-tts-panel')?.open);
  await page.waitForFunction(()=>ttsCalls.some(c=>typeof c==='object'));
  assert.equal(await page.evaluate(()=>lastUtterance.text),'안녕하세요.','a word crossing rendered pages remains a single utterance');
  const wholeSentenceCalls=await page.evaluate(()=>ttsCalls.filter(c=>typeof c==='object').length);

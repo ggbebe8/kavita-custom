@@ -1566,8 +1566,106 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
   const pref='kavita-browser-tts-v1';
   const highlightName='kavita-tts-current';
   const style=document.createElement('style');
-  style.textContent='::highlight(kavita-tts-current){background:#ffe066;color:#111}';document.head.append(style);
+  style.textContent=`
+::highlight(kavita-tts-current){background:#ffe066;color:#111}
+app-book-reader.kavita-tts-active .reader-header .right-group > button:not([data-kavita-tts-ctrl]),
+app-book-reader.kavita-tts-active .reader-header > button:not([data-kavita-tts-ctrl]) {
+  display: none !important;
+}
+app-book-reader .reader-header [data-kavita-tts-ctrl] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+app-book-reader:not(.kavita-tts-active) .reader-header [data-kavita-tts-ctrl]:not([data-kavita-tts]) {
+  display: none !important;
+}
+.kavita-tts-ctrl-active {
+  color: #0d6efd !important;
+}
+`;
+  document.head.append(style);
   let expectedScroll=null,following=false,userPaused=false;
+  const isTtsActive=()=>!!(serverTts?.active||session);
+  const isTtsPaused=()=>{
+    if(serverTts?.active)return !serverTts.starting&&serverTts.paused;
+    if(session)return userPaused||synth.paused;
+    return false;
+  };
+  function resumeTts(){
+    if(serverTts?.active){
+      void serverTts.resume();
+    }else if(session){
+      userPaused=false;synth.resume();if(!utterance&&!session.advancing)void speakNext(token);announce('읽는 중');syncTtsControls('playing');
+    }else if(serverSelected()){
+      void serverTts?.start({voice:Number(serverVoice?.value||0),rate:Number(rateInput?.value||1),language:serverLanguage?.value||'ko'});
+    }else if(serverRoot){start(serverRoot);}
+  }
+  function pauseTts(){
+    if(serverTts?.active){serverTts.pause();}
+    else if(session){userPaused=true;synth.pause();announce('일시정지 중');syncTtsControls('paused');}
+  }
+  function stopTts(){
+    if(serverTts?.active)serverTts.stop();
+    if(session)stop('읽기를 정지했습니다.');
+    syncTtsControls('stopped');
+  }
+  function syncTtsControls(state,explicitRoot){
+    const active=state?(state!=='stopped'):isTtsActive();
+    const paused=state?(state==='paused'):isTtsPaused();
+    const roots=explicitRoot?[explicitRoot]:document.querySelectorAll('app-book-reader');
+    for(const root of roots){
+      if(active)root.classList.add('kavita-tts-active');
+      else root.classList.remove('kavita-tts-active');
+      const ttsBtn=root.querySelector('[data-kavita-tts]');
+      if(!ttsBtn?.parentElement)continue;
+      const parent=ttsBtn.parentElement;
+      if(active){
+        ttsBtn.setAttribute('data-kavita-tts-ctrl','settings');
+        ttsBtn.setAttribute('aria-label','음성 설정');
+        ttsBtn.title='음성 설정';
+        const icon=ttsBtn.querySelector('i');if(icon)icon.className='fa-solid fa-sliders';
+        let playBtn=parent.querySelector('[data-kavita-tts-ctrl="play"]');
+        let pauseBtn=parent.querySelector('[data-kavita-tts-ctrl="pause"]');
+        let stopBtn=parent.querySelector('[data-kavita-tts-ctrl="stop"]');
+        if(!playBtn){
+          playBtn=document.createElement('button');playBtn.type='button';playBtn.className='btn btn-icon me-1';
+          playBtn.setAttribute('data-kavita-tts-ctrl','play');playBtn.setAttribute('aria-label','재생');playBtn.title='재생';
+          const i=document.createElement('i');i.className='fa-solid fa-play';i.setAttribute('aria-hidden','true');playBtn.append(i);
+          playBtn.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();resumeTts();});
+          parent.insertBefore(playBtn,ttsBtn);
+        }
+        if(!pauseBtn){
+          pauseBtn=document.createElement('button');pauseBtn.type='button';pauseBtn.className='btn btn-icon me-1';
+          pauseBtn.setAttribute('data-kavita-tts-ctrl','pause');pauseBtn.setAttribute('aria-label','일시정지');pauseBtn.title='일시정지';
+          const i=document.createElement('i');i.className='fa-solid fa-pause';i.setAttribute('aria-hidden','true');pauseBtn.append(i);
+          pauseBtn.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();pauseTts();});
+          parent.insertBefore(pauseBtn,ttsBtn);
+        }
+        if(!stopBtn){
+          stopBtn=document.createElement('button');stopBtn.type='button';stopBtn.className='btn btn-icon me-1';
+          stopBtn.setAttribute('data-kavita-tts-ctrl','stop');stopBtn.setAttribute('aria-label','정지');stopBtn.title='정지';
+          const i=document.createElement('i');i.className='fa-solid fa-stop';i.setAttribute('aria-hidden','true');stopBtn.append(i);
+          stopBtn.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();stopTts();});
+          parent.insertBefore(stopBtn,ttsBtn);
+        }
+        if(paused){
+          playBtn.disabled=false;playBtn.classList.add('kavita-tts-ctrl-active');playBtn.style.opacity='1';
+          pauseBtn.disabled=true;pauseBtn.classList.remove('kavita-tts-ctrl-active');pauseBtn.style.opacity='0.5';
+        }else{
+          playBtn.disabled=true;playBtn.classList.remove('kavita-tts-ctrl-active');playBtn.style.opacity='0.5';
+          pauseBtn.disabled=false;pauseBtn.classList.add('kavita-tts-ctrl-active');pauseBtn.style.opacity='1';
+        }
+        stopBtn.disabled=false;
+      }else{
+        parent.querySelectorAll('[data-kavita-tts-ctrl]:not([data-kavita-tts])').forEach(b=>b.remove());
+        ttsBtn.removeAttribute('data-kavita-tts-ctrl');
+        ttsBtn.setAttribute('aria-label','본문 읽어주기');
+        ttsBtn.title='본문 읽어주기';
+        const icon=ttsBtn.querySelector('i');if(icon)icon.className='fa-solid fa-volume-high';
+      }
+    }
+  }
   function clearHighlight(){window.CSS?.highlights?.delete(highlightName);document.getElementById('kavita-tts-highlight-fallback')?.remove();}
   function textRange(start,end) {
     if(!session)return null;
@@ -1615,6 +1713,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
   function stop(message='읽기를 정지했습니다.') {
     token++;userPaused=false;session=null;utterance=null;expectedScroll=null;clearHighlight();synth.cancel();announce(message);
     document.querySelectorAll('[data-kavita-tts]').forEach(button=>button.setAttribute('aria-label','본문 읽어주기'));
+    syncTtsControls('stopped');
   }
   function voices() {
     if(!voiceSelect)return;
@@ -1742,6 +1841,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
     session={root,content,chunks,entries,text,lang};
     speakNext(token);
     document.querySelectorAll('[data-kavita-tts]').forEach(button=>button.setAttribute('aria-label','본문 읽어주기 · 재생 중'));
+    syncTtsControls('playing',root);
     return true;
   }
   function openPanel(root) {
@@ -1778,7 +1878,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
     void loadServer().then(async module=>{
       if(new URLSearchParams(location.search).get('kv-offline')==='1')return;
       if(!await module.available()||panel!==ownerPanel)return;
-      if(serverRoot!==root){serverTts?.stop();serverTts=module.create({root,announce,startText:()=>readingText(root.querySelector('.book-content')).text,stopBrowser:()=>stop()});serverRoot=root;}
+      if(serverRoot!==root){serverTts?.stop();serverTts=module.create({root,announce,startText:()=>readingText(root.querySelector('.book-content')).text,stopBrowser:()=>stop(),onState:state=>syncTtsControls(state,root)});serverRoot=root;}
       sourceSelect.add(new Option('서버 음성 · 백그라운드 재생','server'));
       let preferred;try{preferred=localStorage.getItem('kavita-tts-source');}catch{}
       sourceSelect.value=serverTts.active||(!session&&preferred!=='browser')?'server':'browser';updateSource();
@@ -1788,7 +1888,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
     const save=()=>{settings={rate:Number(rateInput.value),voice:voiceSelect.value};rateLabel.firstChild.textContent=`속도 ${settings.rate}배 `;try{localStorage.setItem(pref,JSON.stringify(settings));}catch{}};
     rateInput.addEventListener('input',()=>{save();if(serverTts?.active)serverTts.setRate(Number(rateInput.value));});voiceSelect.addEventListener('change',save);
     status=document.createElement('p');status.setAttribute('aria-live','polite');status.textContent=session?(synth.paused?'일시정지 중':'읽는 중'):'음성·속도 변경은 다음 읽기 구간부터 적용됩니다.';panel.append(status);
-    for(const [label,action] of [['재생',()=>{if(serverSelected()){if(serverTts?.active)void serverTts.resume();else void serverTts?.start({voice:Number(serverVoice.value),rate:Number(rateInput.value),language:serverLanguage.value});return;}if(session){userPaused=false;synth.resume();if(!utterance&&!session.advancing)void speakNext(token);announce('읽는 중');}else start(root);}],['일시정지',()=>{if(serverSelected()){serverTts?.pause();return;}if(session){userPaused=true;synth.pause();announce('일시정지 중');}}],['정지',()=>{if(serverTts?.active)serverTts.stop();else stop();}],['닫기',()=>panel.close()]]){
+    for(const [label,action] of [['재생',()=>{if(serverSelected()){if(serverTts?.active)void serverTts.resume();else void serverTts?.start({voice:Number(serverVoice.value),rate:Number(rateInput.value),language:serverLanguage.value});panel?.close();return;}if(session){userPaused=false;synth.resume();if(!utterance&&!session.advancing)void speakNext(token);announce('읽는 중');syncTtsControls('playing',root);}else start(root);panel?.close();}],['일시정지',()=>{if(serverSelected()){serverTts?.pause();return;}if(session){userPaused=true;synth.pause();announce('일시정지 중');syncTtsControls('paused',root);}}],['정지',()=>{if(serverTts?.active)serverTts.stop();else stop();}],['닫기',()=>panel.close()]]){
       const button=document.createElement('button');button.type='button';button.textContent=label;button.style.cssText='margin:6px;padding:8px';button.addEventListener('click',action);panel.append(button);
     }
     (document.fullscreenElement||document.body).append(panel);panel.showModal();
@@ -1802,6 +1902,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
       const icon=document.createElement('i');icon.className='fa-solid fa-volume-high';icon.setAttribute('aria-hidden','true');button.append(icon);
       button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openPanel(root);});anchor.parentElement.insertBefore(button,anchor.parentElement.querySelector('[data-kavita-fullscreen]')||anchor);
     }
+    syncTtsControls();
   }
   document.addEventListener('kavita-page-navigation',event=>{if(session&&!event.kavitaTts)stop('페이지를 이동하여 읽기를 정지했습니다.');});
   document.addEventListener('kavita-reading-conflict',()=>{if(session)stop('다른 브라우저의 읽기 위치를 확인하기 위해 정지했습니다.');});
@@ -1813,6 +1914,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
   for(const type of ['pointerdown','keydown'])document.addEventListener(type,event=>{if(event.isTrusted&&session?.advancing&&!event.target.closest('#kavita-tts-panel'))stop('사용자 조작으로 이어 읽기를 정지했습니다.');},true);
   window.addEventListener('pagehide',()=>stop());
   synth.addEventListener('voiceschanged',voices);
+  document.addEventListener('kavita-tts-state',event=>{syncTtsControls(event.detail?.state);});
   let scheduled=false;
   new MutationObserver(records=>{
     if(session&&!session.advancing&&records.some(r=>session.content.contains(r.target)))stop('본문이 변경되어 읽기를 정지했습니다.');
