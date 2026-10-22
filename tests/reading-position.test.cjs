@@ -47,6 +47,21 @@ const script=readFileSync('proxy/swipe.js','utf8');
     const content=document.querySelector('.book-content'),text=content.querySelector('p').firstChild,range=document.createRange();range.setStart(text,6000);range.setEnd(text,6001);
     const rect=range.getBoundingClientRect(),view=content.getBoundingClientRect();return content.scrollLeft>0&&rect.left>=view.left-2&&rect.left<view.right;
   });
+  // Accidental touch/pointerdown during the restoration window must not cancel resume or overwrite target position with screen 1.
+  progressDelay=0;
+  progress={chapterId:1,pageNum:0,bookScrollId:original};
+  await start();
+  assert.equal(await page.evaluate(()=>document.querySelector('app-book-reader').classList.contains('kv-restoring-position')),true,'Mask is applied during restoration');
+  await page.evaluate(()=>{
+    const content=document.querySelector('.book-content');
+    const touch=new Touch({identifier:1,target:content,clientX:100,clientY:100});
+    content.dispatchEvent(new TouchEvent('touchstart',{bubbles:true,touches:[touch]}));
+    content.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,clientX:100,clientY:100}));
+  });
+  await save();
+  assert.equal(progress.bookScrollId,original,'Accidental touch must not erase target screen offset');
+  await page.waitForFunction(()=>Math.abs(document.querySelector('.book-content').scrollLeft-3*820)<1);
+  assert.equal(await page.evaluate(()=>document.querySelector('app-book-reader').classList.contains('kv-restoring-position')),false,'Mask is removed after restoration');
   // A late initial-progress response must not undo an explicit chapter jump.
   progress={...progress,pageNum:1};progressDelay=300;
   await page.goto('http://position.test/reader');await page.addScriptTag({content:script});

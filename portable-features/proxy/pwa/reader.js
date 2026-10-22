@@ -179,6 +179,12 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
     app-book-reader.swipe-restoring-menu .reader-header, app-book-reader.swipe-restoring-menu .bottom-bar { visibility: hidden !important; }
     app-book-reader .reading-section:is(.column-layout-1,.column-layout-2) .book-content {
       touch-action: pan-y pinch-zoom;
+      transition: opacity .15s ease-out;
+    }
+    app-book-reader.kv-restoring-position .reading-section:is(.column-layout-1,.column-layout-2) .book-content {
+      opacity: 0 !important;
+      pointer-events: none !important;
+      transition: none !important;
     }
     app-book-reader .reading-section:is(.column-layout-1,.column-layout-2) .book-content svg {
       max-width: var(--book-reader-content-max-width, 100%) !important;
@@ -580,6 +586,22 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
   window.addEventListener('resize', cancelCalculation, {passive:true});
   let resume = null, navigationEpoch = 0;
   let backwardIntent = 0, backwardTarget = null;
+  let restoring = false, restoringTimer = 0;
+  function setRestoring(active) {
+    if (active === restoring && (active ? restoringTimer : true)) return;
+    clearTimeout(restoringTimer);
+    restoring = active;
+    const root = document.querySelector('app-book-reader');
+    if (active) {
+      root?.classList.add('kv-restoring-position');
+      restoringTimer = setTimeout(() => {
+        setRestoring(false);
+      }, 1200);
+    } else {
+      restoringTimer = 0;
+      root?.classList.remove('kv-restoring-position');
+    }
+  }
   const nativeScrollIntoView = Element.prototype.scrollIntoView;
   Element.prototype.scrollIntoView = function(...args) {
     if (backwardTarget && this.closest?.('app-book-reader .book-content')) {
@@ -754,9 +776,9 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
       if (!book || String(data.chapterId)!==book.id || !sectionMatches(data.pageNum) || !root || root.querySelector('.is-loading') ||
           !root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2')) return body;
       const g=geometry(root);if(!g)return body;
-      if (resume && resume.id===book.id && resume.page===data.pageNum && (resume.kind==='offline'||resume.layout===layoutKey(g))) {
+      if (restoring || (resume && resume.id===book.id && resume.page===data.pageNum && (resume.kind==='offline'||resume.layout===layoutKey(g)))) {
         // Do not let initial native anchor restoration overwrite the exact saved screen.
-        data.bookScrollId=resume.path;
+        data.bookScrollId=resume?.path || data.bookScrollId;
       } else {
         const path=typeof data.bookScrollId==='string'?data.bookScrollId.replace(resumePattern,'').replace(offlineResumePattern,''):'';
         if (!path || !(path.startsWith('//') || path.startsWith('id('))) return body;
@@ -769,8 +791,13 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
     } catch {return body;}
   }
   function restoreScreen(root,g) {
-    if (!resume || !book || resume.id!==book.id || !sectionMatches(resume.page)) return;
-    if (performance.now()-resume.time>10000 || (resume.kind!=='offline'&&resume.layout!==layoutKey(g))) {resume=null;return;}
+    if (!resume || !book || resume.id!==book.id || !sectionMatches(resume.page)) {
+      if (!resume && !backwardTarget && restoring) setRestoring(false);
+      return;
+    }
+    if (performance.now()-resume.time>10000 || (resume.kind!=='offline'&&resume.layout!==layoutKey(g))) {
+      resume=null;setRestoring(false);return;
+    }
     if (document.fonts.status!=='loaded' || [...g.content.querySelectorAll('img')].some(img=>!img.complete)) return;
     if (!resume.ready) {resume.ready=performance.now();return;}
     if (performance.now()-resume.ready<450) return; // Native XPath/image restoration finishes first.
@@ -779,7 +806,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
       try{
         const path=resume.path.replace(offlineResumePattern,''),wrapper=g.content.firstElementChild;
         const element=document.evaluate(path.startsWith('//body')?'.'+path.slice(6):path,path.startsWith('//body')?wrapper:document,null,XPathResult.FIRST_ORDERED_NODE_TYPE,null).singleNodeValue;
-        if(!element){resume=null;return;}
+        if(!element){resume=null;setRestoring(false);return;}
         const walker=document.createTreeWalker(element,NodeFilter.SHOW_TEXT);let offset=resume.offset,rect;
         while(walker.nextNode()){
           const node=walker.currentNode;if(!node.textContent.trim()||node.parentElement.closest('style,script,button,[aria-hidden="true"]'))continue;
@@ -788,16 +815,20 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
         rect=rect||element.getBoundingClientRect();const view=g.content.getBoundingClientRect();
         const absolute=g.vertical?g.content.scrollTop+rect.top-view.top:g.content.scrollLeft+rect.left-view.left;
         target=Math.max(0,Math.floor((absolute+2)/g.size)*g.size);
-      }catch{resume=null;return;}
+      }catch{resume=null;setRestoring(false);return;}
     }
     resume=null;
     g.content.scrollTo(g.vertical?{top:target,behavior:'instant'}:{left:target,behavior:'instant'});
+    setRestoring(false);
     // Notify Kavita's existing scroll/progress handler; no additional POSTs are created.
     g.content.dispatchEvent(new Event('scroll',{bubbles:true}));
   }
   function restoreBackwardScreen(root, g) {
-    if (!backwardTarget || !book || backwardTarget.id !== book.id || backwardTarget.index !== book.index) return;
-    if (performance.now() - backwardTarget.time > 10000) { backwardTarget = null; return; }
+    if (!backwardTarget || !book || backwardTarget.id !== book.id || backwardTarget.index !== book.index) {
+      if (!resume && !backwardTarget && restoring) setRestoring(false);
+      return;
+    }
+    if (performance.now() - backwardTarget.time > 10000) { backwardTarget = null; setRestoring(false); return; }
     if (document.fonts.status !== 'loaded' || [...g.content.querySelectorAll('img')].some(img => !img.complete)) return;
     const target = (g.total - 1) * g.size;
     g.content.scrollTo(g.vertical ? {top: target, behavior: 'instant'} : {left: target, behavior: 'instant'});
@@ -815,15 +846,17 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
       return;
     }
     backwardTarget = null;
+    setRestoring(false);
     g.content.dispatchEvent(new Event('scroll', {bubbles: true}));
   }
-  function noteNavigation() {
+  function noteNavigation(force = false) {
+    if (restoring && !force) return;
     resume = null;
     if (backwardTarget?.ready) backwardTarget = null;
     navigationEpoch++;
   }
   for(const type of ['touchstart','pointerdown','keydown'])document.addEventListener(type,event=>{if(event.isTrusted)noteNavigation();},{capture:true,passive:true});
-  document.addEventListener('kavita-page-navigation',noteNavigation);
+  document.addEventListener('kavita-page-navigation', () => { setRestoring(false); noteNavigation(true); });
   function calculationKey(root, g) {
     const css=getComputedStyle(g.content);
     const child=[...g.content.children].find(el=>el.tagName!=='STYLE');
@@ -1197,7 +1230,10 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
         const match=typeof data.bookScrollId==='string'&&data.bookScrollId.match(resumePattern);
         const offline=typeof data.bookScrollId==='string'&&data.bookScrollId.match(offlineResumePattern);
         resume=offline?{id:info.id,page:data.pageNum,kind:'offline',offset:Number(offline[1]),path:data.bookScrollId,time:performance.now()}:match&&Number.isFinite(Number(match[2]))?{id:info.id,page:data.pageNum,layout:match[1],fraction:Number(match[2]),path:data.bookScrollId,time:performance.now()}:null;
-      } catch {resume=null;} return;
+        if(resume && (resume.kind==='offline' ? resume.offset>0 : resume.fraction>0.02)) {
+          setRestoring(true);
+        }
+      } catch {resume=null;setRestoring(false);} return;
     }
     if (info.type === 'chapter') { try { recordRevision(info.id, text); } catch {} return; }
     if (info.type === 'book-info') {
@@ -1207,6 +1243,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
     if (!book || book.id !== info.id) {
       if (book && (performance.now() - backwardIntent < 10000 || turning)) {
         backwardTarget = {id: info.id, index: info.index, time: performance.now(), ready: null};
+        setRestoring(true);
       }
       book = {id:info.id, index:info.index, html:new Map(), headers:new Headers(headers)};
       cancelCalculation(); signature = ''; counts = []; generation++; failed = false;
@@ -1214,10 +1251,11 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
     } else if (book.index !== info.index) {
       if (info.index < book.index && (performance.now() - backwardIntent < 10000 || turning)) {
         backwardTarget = {id: info.id, index: info.index, time: performance.now(), ready: null};
+        setRestoring(true);
       }
     }
     backwardIntent = 0;
-    if(book.index!==info.index && resume?.id===book.id)resume=null;
+    if(book.index!==info.index && resume?.id===book.id){resume=null;setRestoring(false);}
     if(book.index!==info.index || !book.renderAfter)book.renderAfter=performance.now()+120;
     book.index = info.index; book.html.set(info.index, text);
     book.headers = new Headers(headers);
@@ -1485,7 +1523,7 @@ void import('/kavita-pwa/selection-paging.js').then(module => module.install()).
     const root=document.querySelector('app-book-reader');
     const paginated=!!root?.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2');
     placePageLabel(root,paginated);
-    if(!root) {label.hidden=true;resume=null;cancelCalculation();if(book){book=null;signature='';counts=[];generation++;}return;}
+    if(!root) {setRestoring(false);label.hidden=true;resume=null;cancelCalculation();if(book){book=null;signature='';counts=[];generation++;}return;}
     const popup=[...document.querySelectorAll('[role="dialog"],.offcanvas.show,.popover,app-highlight-bar')].some(visible);
     if(popup||!root.querySelector('.reading-section.column-layout-1,.reading-section.column-layout-2')) {label.hidden=true;return;}
     if(root.querySelector('.is-loading')||root.classList.contains('swipe-restoring-menu')||(book&&performance.now()<book.renderAfter)) {
